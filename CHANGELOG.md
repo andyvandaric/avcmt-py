@@ -4,10 +4,6 @@
 
 ## v1.0.0 (2025-06-16)
 
-- Initial Release
-
-## Unreleased
-
 ### Bug Fixes
 
 - **catch-all**: Add semantic release helper script for versioning and publishing
@@ -42,7 +38,3 @@
 
 - **scripts**: Integrate logging into all scripts for better traceability
   ([`78dd841`](https://github.com/andyvandaric/avcmt-py/commit/78dd841bd448d42cf5bcf0dd2ac41fb86c457de6))
-
-## v1.0.0 (2025-06-15)
-
-- Initial Release
