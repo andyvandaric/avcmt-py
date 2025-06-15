@@ -1,6 +1,8 @@
-# File: avcmt/providers/pollinations.py 
-import requests
+# File: avcmt/providers/pollinations.py
 import time
+
+import requests
+
 
 class PollinationsProvider:
     API_URL = "https://text.pollinations.ai/openai"
@@ -16,9 +18,7 @@ class PollinationsProvider:
         }
         for attempt in range(1, retries + 1):
             try:
-                response = requests.post(
-                    self.API_URL, json=payload, headers=headers, timeout=60
-                )
+                response = requests.post(self.API_URL, json=payload, headers=headers, timeout=60)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"].strip()
@@ -27,6 +27,4 @@ class PollinationsProvider:
                     print(f"[Pollinations] Error (attempt {attempt}): {e}. Retrying...")
                     time.sleep(2)
                     continue
-                raise RuntimeError(
-                    f"[Pollinations] Failed after {retries} attempts: {e}"
-                )
+                raise RuntimeError(f"[Pollinations] Failed after {retries} attempts: {e}")
