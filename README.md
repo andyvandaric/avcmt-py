@@ -1,6 +1,7 @@
 # avcmt-py - AI-Powered Semantic Release Style Git Commit Automation for Python Projects
 
-[![PyPI version](https://img.shields.io/pypi/v/avcmt-py.svg)](https://pypi.org/project/avcmt-py/) [![Downloads](https://static.pepy.tech/badge/avcmt-py)](https://pepy.tech/project/avcmt-py) [![License](https://img.shields.io/github/license/andyvandaric/avcmt-py)](LICENSE) [![CI](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml/badge.svg)](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/) [![Ruff](https://img.shields.io/badge/Ruff-%20-fastapi?style=for-the-badge&labelColor=202020&logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/) [![PyPI](https://img.shields.io/badge/pypi-v0.11.13-orange?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/ruff/) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://opensource.org/licenses/MIT) [![Python Versions](https://img.shields.io/badge/%203.10%20|%203.11%20|%203.12%20|%203.13-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/) [![CI](https://img.shields.io/badge/main-passing-brightgreen?style=for-the-badge&logo=github)](https://github.com/andyvandaric/avcmt-py/actions)
+[![PyPI version](https://img.shields.io/pypi/v/avcmt-py.svg)](https://pypi.org/project/avcmt-py/) [![Downloads](https://static.pepy.tech/badge/avcmt-py)](https://pepy.tech/project/avcmt-py) [![License](https://img.shields.io/github/license/andyvandaric/avcmt-py)](LICENSE) [![CI](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml/badge.svg)](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
+[![Ruff](https://img.shields.io/badge/Ruff-%20-fastapi?style=for-the-badge&labelColor=202020&logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/) [![PyPI](https://img.shields.io/badge/pypi-v0.11.13-orange?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/ruff/) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://opensource.org/licenses/MIT) [![Python Versions](https://img.shields.io/badge/%203.10%20|%203.11%20|%203.12%20|%203.13-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/) [![CI](https://img.shields.io/badge/main-passing-brightgreen?style=for-the-badge&logo=github)](https://github.com/andyvandaric/avcmt-py/actions)
 
 
 Tired of manually crafting Git commit messages? Supercharge your Python development workflow with **[avcmt-py](https://github.com/andyvandaric/avcmt-py)**, the intelligent CLI tool that automates semantic, structured commit message generation using AI. Boost productivity and maintain a crystal-clear repository history effortlessly.
@@ -10,7 +11,7 @@ Tired of manually crafting Git commit messages? Supercharge your Python developm
 > One command, zero guesswork: meaningful, structured commits using your Pollinations AI API Token.
 > Install, configure your API key, and enjoy never writing boring commit messages again!
 
----
+
 
 ## 🚀 What is avcmt-py?
 
@@ -21,7 +22,7 @@ Tired of manually crafting Git commit messages? Supercharge your Python developm
 - **Integrates with pre-commit, CI/CD, and release workflows.**
 - **Flexible AI provider: choose your favorite (support for Gemini, Pollinations, OpenAI out-of-the-box).**
 
----
+
 
 ## ✨ Features
 
@@ -43,7 +44,7 @@ Tired of manually crafting Git commit messages? Supercharge your Python developm
 - **Easy to Install, Easy to Use:**
   Works on any Python project, no lock-in.
 
----
+
 
 ## 📦 Installation
 
@@ -95,7 +96,7 @@ pip install .
 
     -   Check your git log for clean, structured, semantic-release-ready commit messages.
 
-* * * *
+
 
 ## 🛠️ Usage
 
@@ -116,7 +117,7 @@ avcmt --dry-run
 avcmt --push
 ```
 
-* * * *
+
 
 ## 🔒 Environment & Configuration
 
@@ -128,47 +129,66 @@ avcmt --push
 
     -   (other providers: applied next update)
 
-* * * *
+
 
 ## 📦 **Project Structure** (`avcmt-py/`)
 
 ```bash
 avcmt-py/
-│
+├── .env.example
+├── .github/
+│   └── workflows/
+│       ├── pre-commit.yml
+│       └── release.yaml
+├── .gitignore
+├── .pre-commit-config.yaml
+├── CHANGELOG.md
+├── LICENSE
+├── README.md
+├── pyproject.toml
 ├── avcmt/
 │   ├── __init__.py
+│   ├── ai.py
 │   ├── cli.py
 │   ├── commit.py
-│   ├── ai.py
-│   └── utils.py
-│
-├── README.md
-├── LICENSE
-├── .env.example
-├── .gitignore
-├── pyproject.toml
+│   ├── utils.py
+│   ├── prompt_templates/
+│   │   └── commit_message.j2
+│   └── providers/
+│       ├── __init__.py
+│       ├── openai.py
+│       └── pollinations.py
+├── scripts/
+│   ├── check.py
+│   ├── clean.py
+│   ├── format.py
+│   ├── helper.py
+│   ├── lintfix.py
+│   ├── preflight.py
+│   ├── semrel.py
+│   └── setup.py
 └── setup.cfg
 ```
 
 ### ✨ **File Descriptions**
 
--   `avcmt/cli.py` --- CLI entry point, handles argument parsing and triggers auto-commit.
+-   `avcmt/cli.py`  CLI entry point, handles argument parsing and triggers auto-commit.
 
--   `avcmt/commit.py` --- Core logic for grouping, git handling, and logging.
+-   `avcmt/commit.py`  Core logic for grouping, git handling, and logging.
 
--   `avcmt/ai.py` --- Handles API requests to Pollinations (reads token from `.env`).
+-   `avcmt/ai.py`  Handles API requests to Pollinations (reads token from `.env`).
 
--   `avcmt/utils.py` --- Helper functions for logging, env handling, and file operations.
+-   `avcmt/utils.py`  Helper functions for logging, env handling, and file operations.
 
--   `.env.example` --- Environment file template. Don't forget to add your token in `.env`.
+-   `.env.example`  Environment file template. Don't forget to add your token in `.env`.
 
--   `pyproject.toml` --- Project metadata, scripts, and dependencies.
+-   `pyproject.toml`  Project metadata, scripts, and dependencies.
 
--   `README.md` --- Contains branding and usage instructions.
+-   `README.md`  Contains branding and usage instructions.
 
--   `LICENSE` --- MIT License.
+-   `LICENSE`  MIT License.
 
--   `.gitignore` --- Ignores `.env`, `.pyc`, build files, etc.
+-   `.gitignore`  Ignores `.env`, `.pyc`, build files, etc.
 
 ## 🧩 Advanced
 
@@ -181,7 +201,7 @@ avcmt-py/
 -   **Full CLI options:**
     Run `avcmt --help` for all flags.
 
-* * * *
+
 
 ## 📚 FAQ
 
@@ -197,7 +217,7 @@ A: You'll see a clear error and nothing will be committed.
 **Q: Is it safe for public/private repos?**
 A: Yes, no token or diff is ever sent to any server except the AI you choose.
 
-* * * *
+
 
 ## 🌟 Why avcmt-py?
 
@@ -209,7 +229,7 @@ A: Yes, no token or diff is ever sent to any server except the AI you choose.
 
 -   ✨ *Your AI, your rules: bring your own API key, use any LLM*
 
-* * * *
+
 
 ## 🔗 Links
 
@@ -217,13 +237,13 @@ A: Yes, no token or diff is ever sent to any server except the AI you choose.
 
 -   [PyPI](https://pypi.org/project/avcmt-py/)
 
-* * * *
+
 
 ## 📝 License
 
-[MIT](LICENSE) --- Made by [Andy Vandaric](https://github.com/andyvandaric)
+[MIT](LICENSE)  Made by [Andy Vandaric](https://github.com/andyvandaric)
 
-* * * *
+
 
 ## 👏 Credits
 
