@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # Trigger hanya saat push tag seperti v1.2.3
+
+jobs:
+  release:
+    name: Python Semantic Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          pip install poetry
+
+      - name: Install project dependencies
+        run: poetry install --no-root
+
+      - name: Run Semantic Release
+        run: poetry run semantic-release publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
