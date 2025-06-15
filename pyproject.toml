@@ -10,7 +10,7 @@ include = ["avcmt/*"]
 
 [tool.semantic_release]
 version_variable = ["pyproject.toml:version"]  # Version will be read from and updated here
-version_source = "tag"                         # Recommended: use Git tags for versioning
+version_source = "commit"                         # Recommended: for Automatic Versioning
 commit_author = "Andy Vandaric <andyvandaric@gmail.com>"
 branch = "main"                                # Set to your default branch
 build_command = "poetry build"

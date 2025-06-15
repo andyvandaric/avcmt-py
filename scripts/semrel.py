@@ -45,6 +45,10 @@ def print_help():
         "[green]semrel --changelog[/]", "Generate the changelog for next release"
     )
     table.add_row(
+        "[cyan]semrel --version-step[/]",
+        "Run versioning step only (bump version, changelog, tag, commit, no publish)",
+    )
+    table.add_row(
         "[red]semrel --release[/]",
         "Perform real release: version bump, changelog, tag, push to repo",
     )
@@ -55,6 +59,7 @@ def print_help():
     console.print("  poetry run semrel --next-tag")
     console.print("  poetry run semrel --dry-run")
     console.print("  poetry run semrel --changelog")
+    console.print("  poetry run semrel --version-step")
     console.print("  poetry run semrel --release")
     console.print("  poetry run semrel -h\n")
     sys.exit(0)
@@ -76,6 +81,11 @@ def main():
     )
     parser.add_argument(
         "--changelog", action="store_true", help="Generate changelog for next release"
+    )
+    parser.add_argument(
+        "--version-step",
+        action="store_true",
+        help="Run versioning step only (bump version, changelog, tag, commit but no publish/upload)",
     )
     parser.add_argument(
         "--release",
@@ -113,6 +123,12 @@ def main():
         run_cmd(
             ["poetry", "run", "semantic-release", "publish", "--dry-run"],
             "Dry-run publish (simulate, nothing pushed)",
+        )
+
+    if args.version_step:
+        run_cmd(
+            ["poetry", "run", "semantic-release", "version"],
+            "Run versioning step only (bump version, changelog, tag, commit, no publish)",
         )
 
     if args.changelog:
