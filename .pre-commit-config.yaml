@@ -1,14 +1,13 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13  # atau versi terbaru, cek https://github.com/astral-sh/ruff-pre-commit/releases
+    rev: v0.11.13
     hooks:
+      - id: ruff-check
+        args: [--fix]
+        types_or: [python, pyi]
       - id: ruff-format
-        args: ["--check"]
-      - id: ruff
-        name: ruff-lint
-        args: ["."]
+        types_or: [python, pyi]
 
-# Opsional: auto-update pre-commit (best practice CI)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

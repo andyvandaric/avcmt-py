@@ -1,9 +1,79 @@
+# ===== Python cache =====
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+
+# ===== Virtualenvs (Poetry/Pipenv/Venv) =====
 .env
-.env.*
+.venv/
+venv/
+*.env
+*.env.*
+
+# ===== IDE/Editor =====
+.vscode/
+.idea/
+*.swp
+*.sublime-workspace
+*.sublime-project
+
+# ===== macOS / Windows =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ===== Bytecode & Build artifacts =====
 *.egg-info/
 dist/
 build/
-CHANGELOG.md
+
+# ===== Poetry Lock & Cache (keep lock file, ignore cache) =====
+poetry.lock
+.poetry-cache/
+.poetry/
+
+# ===== Pre-commit Hooks Local Cache =====
+.git/hooks/
+
+# ===== Log, Output, Temp =====
+log/
+*.log
+*.tmp
+*.bak
+
+# ===== Lint, Test & Coverage =====
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+pytest_cache/
+.nox/
+
+# ===== Markdown Preview or Notebook Cache =====
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# ===== Ruff / Format / Type Checking =====
+ruff_cache/
+.mypy_cache/
+.pyright/
+
+# ===== OS Generated Files =====
+*.~lock.*
+*.orig
+*.rej
+
+# ===== Editor backup files =====
+*~
+*.bak
+*.tmp
+*.backup
+*.swp
+*.swo
+
+# ===== Exported ZIP / Archive Output =====
+*.zip
+*.tar.gz
+*.tar

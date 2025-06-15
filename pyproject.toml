@@ -1,21 +1,71 @@
 [tool.poetry]
 name = "avcmt"
 version = "0.1.0"
-description = "avcmt: AI-Powered Semantic Release Style Git Commit Automation for Pyhon Project."
+description = "avcmt: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
 authors = ["Andy Vandaric <andyvandaric@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [{ include = "avcmt" }]
 include = ["avcmt/*"]
 
+[tool.semantic_release]
+version_variable = ["pyproject.toml:version"]  # Version will be read from and updated here
+version_source = "tag"                         # Recommended: use Git tags for versioning
+commit_author = "Andy Vandaric <andyvandaric@gmail.com>"
+branch = "main"                                # Set to your default branch
+build_command = "poetry build"
+upload_to_pypi = false                         # Set to true if you want to auto-upload to PyPI
+upload_to_release = false                      # Set to true if you want to auto-create GitHub Releases
+repository = "https://github.com/andyvandaric/avcmt-py"  # Remote repository URL (optional if local-only)
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.md"
+
+[tool.poetry.urls]
+"Homepage" = "https://avcmt.avandaric.live"      # Your main landingpage or docs site
+"Repository" = "https://github.com/andyvandaric/avcmt-py"  # The actual code repository
+"Documentation" = "https://avcmt.avandaric.live/docs"       # (optional, for direct link to docs)
+
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10"
 requests = "^2.32"
 jinja2 = "^3.1.4"
 python-dotenv = "^1.0.1"
+rich = "^14.0.0"
 
 [tool.poetry.scripts]
 avcmt = "avcmt.cli:main"
+clean = "scripts.clean:main"
+format = "scripts.format:main"
+lintfix = "scripts.lintfix:main"
+check = "scripts.check:main"
+
+[tool.poetry.group.dev.dependencies]
+python-dotenv = "^1.1.0"
+ruff = "^0.11.13"
+pre-commit = "^4.2.0"
+python-semantic-release = "^10.1.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["ALL"]
+ignore = ["D", "ANN", "COM812", "ISC001"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["avcmt"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [build-system]
 requires = ["poetry-core"]
