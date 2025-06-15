@@ -105,15 +105,19 @@ def extract_commit_messages_from_md(filepath):
 
 
 def setup_logging(log_file="commit_group_all.log"):
-    log_dir = os.path.dirname(log_file)
-    if log_dir:  # Only create directory if log_dir is not empty
-        os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s: %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
-            logging.StreamHandler(),
-        ],
-    )
-    return logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
+    if not logger.hasHandlers():
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
+
+        fh = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+    return logger
