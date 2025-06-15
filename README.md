@@ -26,23 +26,23 @@ Tired of manually crafting Git commit messages? Supercharge your Python developm
 
 ## ✨ Features
 
-- **AI-Powered Commit Messages:**
-  Generate detailed, semantic-release-style commit messages from git diff with a single command.
+-   **AI-Powered Commit Messages:** Generate detailed, semantic-release-style commit messages from git diff with a single command.
 
-- **Directory Grouping:**
-  Automatically groups and commits related changes per directory (or as a catch-all).
+-   **Directory Grouping:** Automatically groups and commits related changes per directory (or as a catch-all).
 
-- **Semantic Release Ready:**
-  Commit format fully compatible with [semantic-release](https://semantic-release.gitbook.io/) for auto versioning & changelogs.
+-   **Semantic Release Ready:** Commit format fully compatible with [semantic-release](https://semantic-release.gitbook.io/) for auto versioning & changelogs.
 
-- **Multi-Provider AI:**
-  Easily switch between Gemini, Pollinations, OpenAI (or extend to your own LLM API).
+-   **Multi-Provider AI:** Easily switch between Gemini, Pollinations, OpenAI (or extend to your own LLM API).
 
-- **Zero Hardcoded Secrets:**
-  API keys are loaded from `.env` or environment variables.
+-   **Jinja2 Prompt Templates:** Fully customizable prompt rendering using Jinja2 templates for flexible commit messaging.
 
-- **Easy to Install, Easy to Use:**
-  Works on any Python project, no lock-in.
+-   **Zero Hardcoded Secrets:** API keys are loaded from `.env` or environment variables.
+
+-   **Easy to Install, Easy to Use:** Works on any Python project, no lock-in.
+
+-   **Developer Tools Included:** Scripts for linting, formatting, preflight check, and triggering semantic release.
+
+-   **Pre-commit & CI/CD Friendly:** Fully integrated with pre-commit and GitHub Actions for automated workflows.
 
 
 
@@ -70,13 +70,14 @@ pip install .
 
     ```env
     # Example (.env)
-    POLLINATIONS_API_TOKEN=your-token-here
+    OPENAI_API_KEY=your_openai_token
+    POLLINATIONS_TOKEN=your_pollinations_token
     ```
 
-2.  **Stage your git changes:**
+2.  (Optional) Enable pre-commit hook:
 
     ```
-    git add .
+    pre-commit install
     ```
 
 3.  **Run avcmt:**
@@ -172,23 +173,59 @@ avcmt-py/
 
 ### ✨ **File Descriptions**
 
--   `avcmt/cli.py`  CLI entry point, handles argument parsing and triggers auto-commit.
+-   `avcmt/cli.py` --- CLI entry point, handles argument parsing and triggers auto-commit.
 
--   `avcmt/commit.py`  Core logic for grouping, git handling, and logging.
+-   `avcmt/commit.py` --- Core logic for grouping, git interaction, and structured AI commit message generation.
 
--   `avcmt/ai.py`  Handles API requests to Pollinations (reads token from `.env`).
+-   `avcmt/ai.py` --- Manages prompt rendering and request to the AI provider (Jinja2-powered).
 
--   `avcmt/utils.py`  Helper functions for logging, env handling, and file operations.
+-   `avcmt/utils.py` --- Helper functions for environment, logging, and file operations.
 
--   `.env.example`  Environment file template. Don't forget to add your token in `.env`.
+-   `avcmt/__init__.py` --- Marks the core package.
 
--   `pyproject.toml`  Project metadata, scripts, and dependencies.
+-   `avcmt/prompt_templates/commit_message.j2` --- Jinja2 template for AI commit prompt.
 
--   `README.md`  Contains branding and usage instructions.
+-   `avcmt/providers/openai.py` --- Adapter for OpenAI API.
 
--   `LICENSE`  MIT License.
+-   `avcmt/providers/pollinations.py` --- Adapter for Pollinations API.
 
--   `.gitignore`  Ignores `.env`, `.pyc`, build files, etc.
+-   `avcmt/providers/__init__.py` --- Provider interface loader.
+
+-   `scripts/check.py` --- Run validation checks on repo status.
+
+-   `scripts/clean.py` --- Optional cleanup utility.
+
+-   `scripts/format.py` --- Format code using Ruff or Black.
+
+-   `scripts/helper.py` --- Shared utilities across scripts.
+
+-   `scripts/lintfix.py` --- Lint and auto-fix with Ruff.
+
+-   `scripts/preflight.py` --- Pre-commit safety check runner.
+
+-   `scripts/semrel.py` --- Trigger python-semantic-release publish process.
+
+-   `scripts/setup.py` --- One-shot setup script for dev environment.
+
+-   `.env.example` --- Environment file template. Copy to `.env` and fill your token.
+
+-   `.pre-commit-config.yaml` --- Pre-commit hook configuration.
+
+-   `.gitignore` --- Ignore compiled files, .env, cache, etc.
+
+-   `pyproject.toml` --- Project metadata and dependency configuration.
+
+-   `setup.cfg` --- Optional setup file for tools compatibility.
+
+-   `README.md` --- Full project description and usage.
+
+-   `LICENSE` --- MIT License.
+
+-   `CHANGELOG.md` --- Auto-generated changelog via semantic release.
+
+-   `.github/workflows/release.yaml` --- CI workflow for auto versioning and publishing.
+
+-   `.github/workflows/pre-commit.yaml` --- CI pre-commit hook runner.
 
 ## 🧩 Advanced
 
