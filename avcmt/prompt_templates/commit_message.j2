@@ -1,0 +1,10 @@
+Analyze the following git diff for the directory `{{ group_name }}` and generate a detailed semantic release commit message.
+Format the output as:
+1. A summary title in semantic release format (type(scope): summary) — scope can be the directory or 'root'.
+2. A short summary paragraph if needed.
+3. Bullet points listing the main changes, grouped as 'New Features', 'Enhancements & Refinements', and 'Bug Fixes' if relevant. Use bold for feature/section names.
+Output only the commit message, don't include explanations or extra text.
+
+Here is the git diff for `{{ group_name }}`:
+
+{{ diff_text }}
