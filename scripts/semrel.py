@@ -50,7 +50,7 @@ def print_help():
     )
     table.add_row(
         "[red]semrel --release[/]",
-        "Perform real release: version bump, changelog, tag, push to repo",
+        "Perform real release/publish: version bump, changelog, tag, push to repo",
     )
     table.add_row("[white]semrel -h or [/] [white]--help[/]", "Show this help")
     console.print(table)
