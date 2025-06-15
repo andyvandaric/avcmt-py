@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "avcmt"
-version = "0.1.0"
-description = "avcmt: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
+name = "avcmt-py"
+version = "1.0.0"
+description = "avcmt-py: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
 authors = ["Andy Vandaric <andyvandaric@gmail.com>"]
 license = "MIT"
 readme = "README.md"
