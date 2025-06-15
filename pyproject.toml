@@ -18,7 +18,7 @@ upload_to_pypi = false                         # Set to true if you want to auto
 upload_to_release = false                      # Set to true if you want to auto-create GitHub Releases
 repository = "https://github.com/andyvandaric/avcmt-py"  # Remote repository URL (optional if local-only)
 
-[tool.semantic_release.changelog]
+[tool.semantic_release.changelog.default_templates]
 changelog_file = "CHANGELOG.md"
 
 [tool.poetry.urls]
@@ -39,22 +39,35 @@ clean = "scripts.clean:main"
 format = "scripts.format:main"
 lintfix = "scripts.lintfix:main"
 check = "scripts.check:main"
+setup = "scripts.setup:main"
+helper = "scripts.helper:main"
+preflight = "scripts.preflight:main"
 
 [tool.poetry.group.dev.dependencies]
 python-dotenv = "^1.1.0"
 ruff = "^0.11.13"
 pre-commit = "^4.2.0"
 python-semantic-release = "^10.1.0"
+rich = "^14.0.0"
 
 [tool.ruff]
-line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
 preview = true
-extend-select = ["ALL"]
-ignore = ["D", "ANN", "COM812", "ISC001"]
+select = ["E", "F", "I", "N", "UP", "B", "C90", "SIM", "TID", "PL", "PTH", "NPY", "PD", "PERF", "RUF"]
 fixable = ["ALL"]
+ignore = [
+  "D", "ANN",           # docstring dan typing
+  "COM812", "ISC001",   # trailing comma/semicolon
+  "T201", "S603", "S607", "S404",  # print dan subprocess warning
+  "PTH",                # pathlib enforcement (opsional)
+  "S701", "B904", "TRY003", "EM102",  # exception handling
+  "E501",               # line too long
+  "PERF203",            # try-except in loop
+  "PLR0913",            # too many arguments in function definition
+  "PLR0917",            # too many positional arguments
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

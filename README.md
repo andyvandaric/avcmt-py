@@ -5,9 +5,9 @@
 
 Tired of manually crafting Git commit messages? Supercharge your Python development workflow with **[avcmt-py](https://github.com/andyvandaric/avcmt-py)**, the intelligent CLI tool that automates semantic, structured commit message generation using AI. Boost productivity and maintain a crystal-clear repository history effortlessly.
 
-> **TL;DR:**  
-> AI-powered, semantic-release-style git commit automation for Python projects.  
-> One command, zero guesswork: meaningful, structured commits using your Pollinations AI API Token.  
+> **TL;DR:**
+> AI-powered, semantic-release-style git commit automation for Python projects.
+> One command, zero guesswork: meaningful, structured commits using your Pollinations AI API Token.
 > Install, configure your API key, and enjoy never writing boring commit messages again!
 
 ---
@@ -25,22 +25,22 @@ Tired of manually crafting Git commit messages? Supercharge your Python developm
 
 ## ✨ Features
 
-- **AI-Powered Commit Messages:**  
+- **AI-Powered Commit Messages:**
   Generate detailed, semantic-release-style commit messages from git diff with a single command.
 
-- **Directory Grouping:**  
+- **Directory Grouping:**
   Automatically groups and commits related changes per directory (or as a catch-all).
 
-- **Semantic Release Ready:**  
+- **Semantic Release Ready:**
   Commit format fully compatible with [semantic-release](https://semantic-release.gitbook.io/) for auto versioning & changelogs.
 
-- **Multi-Provider AI:**  
+- **Multi-Provider AI:**
   Easily switch between Gemini, Pollinations, OpenAI (or extend to your own LLM API).
 
-- **Zero Hardcoded Secrets:**  
+- **Zero Hardcoded Secrets:**
   API keys are loaded from `.env` or environment variables.
 
-- **Easy to Install, Easy to Use:**  
+- **Easy to Install, Easy to Use:**
   Works on any Python project, no lock-in.
 
 ---
