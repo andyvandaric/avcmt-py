@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Pastikan history lengkap untuk pre-commit yang membutuhkan
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,9 +35,3 @@ jobs:
 
       - name: Run pre-commit
         run: poetry run pre-commit run --all-files --show-diff-on-failure
-
-      - name: Python Semantic Release
-        run: poetry run semantic-release publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
