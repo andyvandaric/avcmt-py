@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-"""Run Ruff lint checks and apply auto-fixes."""
+"""Run Ruff lint checks and apply auto-fixes with logging."""
 
 import subprocess
 import sys
 
-from rich import print
+from avcmt.utils import setup_logging
+
+logger = setup_logging("log/lintfix_codebase.log")
+
+
+def run_lintfix():
+    try:
+        logger.info("🔍 Running Ruff Lint + Auto Fix...")
+        subprocess.run(["ruff", "check", ".", "--fix"], check=True)
+        subprocess.run(["ruff", "format", "."], check=True)
+        logger.info("✅ Ruff linting and formatting completed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ Error during Ruff lint fix: {e}")
+        sys.exit(1)
 
 
 def main():
-    print("[bold green]🔍 Running Ruff Lint Fix...[/]")
-    try:
-        subprocess.run(["ruff", "check", ".", "--fix"], check=True)
-        subprocess.run(["ruff", "format", "."], check=True)
-        print("[bold green]✅ Ruff linting and formatting complete![/]")
-    except subprocess.CalledProcessError as e:
-        print(f"[bold red]❌ Error during lint fix: {e}[/]")
-        sys.exit(1)
+    run_lintfix()
 
 
 if __name__ == "__main__":
