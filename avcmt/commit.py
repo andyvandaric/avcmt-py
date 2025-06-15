@@ -7,7 +7,6 @@ from datetime import datetime
 from avcmt.ai import generate_with_ai, render_prompt
 from avcmt.utils import extract_commit_messages_from_md, is_recent_dry_run
 
-# --- Add constant for PLR2004 (magic number)
 MAX_DIFF_LENGTH = 12000
 
 
@@ -85,6 +84,37 @@ def write_dry_run_entry(filepath, group_name, commit_message):
         f.write(f"## Group: `{group_name}`\n\n```md\n{commit_message}\n```\n\n---\n\n")
 
 
+def stage_all_changes(logger):
+    logger.info("Auto-staging all changes before commit grouping...")
+    subprocess.run(["git", "add", "."], check=False)
+
+
+def process_grouped_commits(
+    grouped_files,
+    cached_messages,
+    dry_run,
+    debug,
+    provider,
+    model,
+    logger,
+    dry_run_file,
+    **kwargs,
+):
+    for group_name, group in grouped_files.items():
+        commit_group(
+            group_name,
+            group,
+            cached_messages,
+            dry_run,
+            debug,
+            provider,
+            model,
+            logger,
+            dry_run_file,
+            **kwargs,
+        )
+
+
 def commit_group(
     group_name,
     files,
@@ -116,7 +146,7 @@ def commit_group(
     if dry_run:
         write_dry_run_entry(dry_run_file, group_name, commit_message)
     else:
-        subprocess.run(["git", "add", *files], check=False)  # <- RUF005 fix
+        subprocess.run(["git", "add", *files], check=False)
         subprocess.run(["git", "commit", "-m", commit_message], check=False)
 
 
@@ -126,7 +156,7 @@ def handle_catchall_commit(cached_messages, debug, provider, model, logger, **kw
         return
 
     logger.info(f"[REMAINING] Some files are still staged: {remaining_files}")
-    subprocess.run(["git", "add", *remaining_files], check=False)  # <- RUF005 fix
+    subprocess.run(["git", "add", *remaining_files], check=False)
     catchall_diff = get_diff_for_files(remaining_files)
 
     if catchall_diff and len(catchall_diff) < MAX_DIFF_LENGTH:
@@ -149,6 +179,23 @@ def handle_catchall_commit(cached_messages, debug, provider, model, logger, **kw
     subprocess.run(["git", "commit", "-m", catchall_message], check=False)
 
 
+def push_all_commits(logger):
+    logger.info("Pushing all commits to the active remote branch...")
+    result = subprocess.run(
+        ["git", "push"], check=False, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        logger.error(f"Git push failed: {result.stderr}")
+    else:
+        logger.info("✔️ All changes pushed to the remote branch.")
+
+
+def warn_unstaged_files(logger):
+    unstaged = get_changed_files()
+    if unstaged:
+        logger.warning(f"Still unstaged/modified files remain: {unstaged}")
+
+
 def run_commit_group_all(
     dry_run=False,
     push=False,
@@ -162,6 +209,9 @@ def run_commit_group_all(
         logger.info(
             f"Starting run_commit_group_all: dry_run={dry_run}, push={push}, debug={debug}"
         )
+
+    if not dry_run:
+        stage_all_changes(logger)
 
     files = get_changed_files()
     if not files:
@@ -177,19 +227,17 @@ def run_commit_group_all(
     if dry_run:
         write_dry_run_header(dry_run_file)
 
-    for group_name, group in grouped_files.items():
-        commit_group(
-            group_name,
-            group,
-            cached_messages,
-            dry_run,
-            debug,
-            provider,
-            model,
-            logger,
-            dry_run_file,
-            **kwargs,
-        )
+    process_grouped_commits(
+        grouped_files,
+        cached_messages,
+        dry_run,
+        debug,
+        provider,
+        model,
+        logger,
+        dry_run_file,
+        **kwargs,
+    )
 
     if not dry_run:
         handle_catchall_commit(
@@ -202,14 +250,9 @@ def run_commit_group_all(
         )
 
     if push and not dry_run:
-        logger.info("Pushing all commits to the active remote branch...")
-        result = subprocess.run(
-            ["git", "push"], check=False, capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            logger.error(f"Git push failed: {result.stderr}")
-        else:
-            logger.info("✔️ All changes pushed to the remote branch.")
+        push_all_commits(logger)
+
+    warn_unstaged_files(logger)
 
     if dry_run:
         logger.info(

@@ -15,7 +15,7 @@ commit_author = "Andy Vandaric <andyvandaric@gmail.com>"
 branch = "main"                                # Set to your default branch
 build_command = "poetry build"
 upload_to_pypi = false                         # Set to true if you want to auto-upload to PyPI
-upload_to_release = false                      # Set to true if you want to auto-create GitHub Releases
+upload_to_release = true                      # Set to true if you want to auto-create GitHub Releases
 repository = "https://github.com/andyvandaric/avcmt-py"  # Remote repository URL (optional if local-only)
 
 [tool.semantic_release.changelog.default_templates]
