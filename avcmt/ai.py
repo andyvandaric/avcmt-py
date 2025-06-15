@@ -2,6 +2,7 @@
 import os
 from importlib import import_module
 
+
 def generate_with_ai(prompt, provider="pollinations", api_key=None, model="gemini", **kwargs):
     """
     Universal AI commit message generator, routed to provider class.
