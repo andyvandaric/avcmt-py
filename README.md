@@ -231,3 +231,4 @@ A: Yes, no token or diff is ever sent to any server except the AI you choose.
 
 -   Powered by Pollinations AI.
 # First semantic-release version
+# Next release
