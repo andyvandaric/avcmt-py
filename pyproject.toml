@@ -42,6 +42,7 @@ check = "scripts.check:main"
 setup = "scripts.setup:main"
 helper = "scripts.helper:main"
 preflight = "scripts.preflight:main"
+semrel = "scripts.semrel:main"
 
 [tool.poetry.group.dev.dependencies]
 python-dotenv = "^1.1.0"
