@@ -203,8 +203,13 @@ def run_commit_group_all(
 
     if push and not dry_run:
         logger.info("Pushing all commits to the active remote branch...")
-        subprocess.run(["git", "push"], check=False)
-        logger.info("✔️ All changes pushed to the remote branch.")
+        result = subprocess.run(
+            ["git", "push"], check=False, capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            logger.error(f"Git push failed: {result.stderr}")
+        else:
+            logger.info("✔️ All changes pushed to the remote branch.")
 
     if dry_run:
         logger.info(
