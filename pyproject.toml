@@ -50,6 +50,7 @@ ruff = "^0.11.13"
 pre-commit = "^4.2.0"
 python-semantic-release = "^10.1.0"
 rich = "^14.0.0"
+toml = "^0.10.2"
 
 [tool.ruff]
 target-version = "py310"
