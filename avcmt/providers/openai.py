@@ -1,14 +1,23 @@
 # File: avcmt/providers/openai.py
+# Revision v2 - Updated to use modern OpenAI v1.x client API.
 
-import openai
+# --- IMPORT CHANGE ---
+# Import the main OpenAI class, not the entire module.
+from openai import OpenAI
 
 
 class OpenaiProvider:
+    """
+    Provider for OpenAI and compatible APIs using the modern v1.x client.
+    """
+
     DEFAULT_MODEL = "gpt-4o"
 
-    def generate(self, prompt, api_key, model=None, **kwargs):
+    def generate(
+        self, prompt: str, api_key: str, model: str | None = None, **kwargs
+    ) -> str:
         """
-        Generate response using OpenAI-compatible API.
+        Generate response using the modern OpenAI ChatCompletion API.
 
         Args:
             prompt (str): Prompt input.
@@ -19,14 +28,20 @@ class OpenaiProvider:
         Returns:
             str: Generated response content.
         """
-        openai.api_key = api_key
-        response = self._send_request(prompt, model or self.DEFAULT_MODEL, **kwargs)
-        return response.choices[0].message.content.strip()
+        # --- LOGIC CHANGE ---
+        # 1. Create a client instance with the API key.
+        try:
+            client = OpenAI(api_key=api_key)
+        except Exception as e:
+            # Add error handling if the client fails to initialize
+            raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
-    @staticmethod
-    def _send_request(prompt, model, **kwargs):  # <--- fix: no "self"
-        return openai.ChatCompletion.create(
-            model=model,
+        # 2. Use the modern API syntax: client.chat.completions.create
+        response = client.chat.completions.create(
+            model=model or self.DEFAULT_MODEL,
             messages=[{"role": "user", "content": prompt}],
             **kwargs,
         )
+        return response.choices[0].message.content.strip()
+
+    # The old _send_request method is no longer needed and has been removed.
