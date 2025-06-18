@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v1.1.0 (2025-06-18)
+
+### Features
+- feat(avcmt/providers): update OpenAI provider to use modern v1.x API ([`d997ca9`](https://github.com/andyvandaric/avcmt-py/commit/d997ca9))
+- feat(root): add initial project setup with dependency lock and configuration ([`cafa9d5`](https://github.com/andyvandaric/avcmt-py/commit/cafa9d5))
+
+### Bug Fixes
+- fix(scripts): improve semrel.py robustness and usability ([`6281633`](https://github.com/andyvandaric/avcmt-py/commit/6281633))
+- fix: update license text and improve README formatting for catch-all scope ([`3293386`](https://github.com/andyvandaric/avcmt-py/commit/3293386))
+- fix(catch-all): update GitHub workflows for improved pre-commit and release operations ([`211073b`](https://github.com/andyvandaric/avcmt-py/commit/211073b))
+
+### Refactoring
+- refactor(avcmt): overhaul commit and release workflows for clarity and robustness ([`0cfcb56`](https://github.com/andyvandaric/avcmt-py/commit/0cfcb56))
+
+### Chores
+- chore(.github/workflows): update release workflow with git configuration and internal release step ([`c3444e3`](https://github.com/andyvandaric/avcmt-py/commit/c3444e3))
+- chore(root): update dependencies in pyproject.toml ([`32de1fc`](https://github.com/andyvandaric/avcmt-py/commit/32de1fc))
+- chore(root): migrate project to version 1.0.0 and update project metadata ([`1f47ae5`](https://github.com/andyvandaric/avcmt-py/commit/1f47ae5))
+- chore(.github/workflows): update release workflow to include PYPI_TOKEN for publishing ([`e7c6cd6`](https://github.com/andyvandaric/avcmt-py/commit/e7c6cd6))
+- chore(root): update changelog and remove redundant release entries ([`1ca2d04`](https://github.com/andyvandaric/avcmt-py/commit/1ca2d04))
+
+
 ## v1.0.0 (2025-06-16)
 
 ### Bug Fixes

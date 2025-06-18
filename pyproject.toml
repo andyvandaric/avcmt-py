@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "avcmt-py"
-version = "1.0.0"
+version = "1.1.0"
 description = "avcmt-py: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
 authors = [ "Andy Vandaric <andyvandaric@gmail.com>",]
 license = "Apache-2.0"
@@ -12,13 +12,6 @@ readme = "README.md"
 include = [ "avcmt/*",]
 [[tool.poetry.packages]]
 include = "avcmt"
-
-[tool.avcmt.release]
-version_path = "pyproject.toml:tool.poetry.version"
-changelog_file = "CHANGELOG.md"
-branch = "main"
-publish_to_pypi = true
-repo_url = "https://github.com/andyvandaric/avcmt-py"
 
 [tool.ruff]
 target-version = "py310"
@@ -46,6 +39,13 @@ helper = "scripts.helper:main"
 preflight = "scripts.preflight:main"
 semrel = "scripts.semrel:main"
 
+[tool.avcmt.release]
+version_path = "pyproject.toml:tool.poetry.version"
+changelog_file = "CHANGELOG.md"
+branch = "main"
+publish_to_pypi = true
+repo_url = "https://github.com/andyvandaric/avcmt-py"
+
 [tool.ruff.lint]
 preview = true
 select = [ "E", "F", "I", "N", "UP", "B", "C90", "SIM", "TID", "PL", "PTH", "NPY", "PD", "PERF", "RUF",]
@@ -56,15 +56,15 @@ ignore = [ "D", "ANN", "COM812", "ISC001", "T201", "S603", "S607", "S404", "PTH"
 quote-style = "double"
 indent-style = "space"
 
-[tool.semantic_release.changelog.default_templates]
-changelog_file = "CHANGELOG.md"
-
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = [ "F401",]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = [ "avcmt",]
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
 
 [tool.poetry.group.dev.dependencies]
 python-dotenv = "^1.1.0"
