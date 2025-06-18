@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write  # Required for the Action to push new commits and tags
+  contents: write # Required for the Action to push new commits and tags
 
 jobs:
   release:
@@ -50,11 +50,14 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Run Internal Avcmt Release
-        # Replace 'semantic-release publish' with our 'semrel' script
-        run: poetry run semrel --push
+        id: avcmt_release # Add id to reference the output
+        run: echo "version=$(poetry run semrel --push)" >> $GITHUB_OUTPUT
         env:
-          # GITHUB_TOKEN is required for git push back to the repo to succeed
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Note: PYPI_TOKEN is not currently used by the new script,
-          # but we can leave it for future development of PyPI publishing features.
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.avcmt_release.outputs.version # Only run if a new version was created
+        run: gh release create ${{ steps.avcmt_release.outputs.version }} --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
