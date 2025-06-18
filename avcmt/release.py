@@ -333,3 +333,5 @@ class ReleaseManager:
             ReleaseManager._publish_to_pypi()
 
         logger.info(f"🚀 Release {self.new_version} completed successfully!")
+
+        return self.new_version
