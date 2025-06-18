@@ -1,155 +1,63 @@
 #!/usr/bin/env python3
-"""Semantic Release Workflow Helper - Loads .env and runs semantic-release commands with correct environment, pretty CLI with color."""
+# File: scripts/semrel.py
+# Description: CLI Wrapper for ReleaseManager.
+# Status: Correct and ready to use.
 
 import argparse
 import os
-import subprocess
 import sys
 
-from dotenv import load_dotenv
-from rich.console import Console
-from rich.table import Table
+# Add the project path to sys.path to ensure avcmt can be imported
+# This makes the script more reliable when run from anywhere.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-load_dotenv()  # auto-load .env into os.environ
-
-
-def run_cmd(cmd, desc):
-    console = Console()
-    console.print(f"\n[bold green]$ {' '.join(cmd)}[/]  [dim]| {desc}[/]")
-    result = subprocess.run(cmd, shell=False, check=False)
-    if result.returncode != 0:
-        console.print(f"[bold red]✖ Step failed: {desc}[/]")
-        sys.exit(result.returncode)
-
-
-def print_help():
-    console = Console()
-    console.rule(
-        "[bold blue]avcmt-py Semantic Release Commands[/]", style="blue", align="center"
+try:
+    from avcmt.release import ReleaseFailedError, ReleaseManager
+except ImportError:
+    print(
+        "Error: Could not import avcmt modules. "
+        "Ensure you have run 'poetry install' and are in the project's virtual environment.",
+        file=sys.stderr,
     )
-    console.print("  ")
-
-    table = Table(show_header=False, box=None, pad_edge=False)
-    table.add_column("", justify="right", no_wrap=False, min_width=28)
-    table.add_column("", justify="left")
-    table.add_row(
-        "[cyan]semrel --next-version[/]",
-        "Print the next semantic version (no write/tag)",
-    )
-    table.add_row("[cyan]semrel --next-tag[/]", "Print the next version tag")
-    table.add_row(
-        "[yellow]semrel --dry-run[/]",
-        "Dry-run: Simulate full semantic-release publish (no changes pushed)",
-    )
-    table.add_row(
-        "[green]semrel --changelog[/]", "Generate the changelog for next release"
-    )
-    table.add_row(
-        "[cyan]semrel --version-step[/]",
-        "Run versioning step only (bump version, changelog, tag, commit, no publish)",
-    )
-    table.add_row(
-        "[red]semrel --release[/]",
-        "Perform real release/publish: version bump, changelog, tag, push to repo",
-    )
-    table.add_row("[white]semrel -h or [/] [white]--help[/]", "Show this help")
-    console.print(table)
-    console.print("\n[bold]Usage examples:[/]")
-    console.print("  poetry run semrel --next-version")
-    console.print("  poetry run semrel --next-tag")
-    console.print("  poetry run semrel --dry-run")
-    console.print("  poetry run semrel --changelog")
-    console.print("  poetry run semrel --version-step")
-    console.print("  poetry run semrel --release")
-    console.print("  poetry run semrel -h\n")
-    sys.exit(0)
+    sys.exit(1)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Semantic Release Workflow Helper: auto-load .env and run full semantic-release workflow.",
-        add_help=False,
+        description="avcmt-py internal semantic release tool.",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "--next-version", action="store_true", help="Print the next semantic version"
-    )
-    parser.add_argument(
-        "--next-tag", action="store_true", help="Print the next version tag"
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Dry-run: Simulate full publish workflow"
-    )
-    parser.add_argument(
-        "--changelog", action="store_true", help="Generate changelog for next release"
-    )
-    parser.add_argument(
-        "--version-step",
+        "--dry-run",
         action="store_true",
-        help="Run versioning step only (bump version, changelog, tag, commit but no publish/upload)",
+        help="Simulate the release process without changing files or git state.",
     )
     parser.add_argument(
-        "--release",
+        "--push",
         action="store_true",
-        help="Publish real release (tag, changelog, push)",
+        help="Push the release commit and tag to the remote repository.",
     )
-    parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
     args = parser.parse_args()
-    console = Console()
 
-    if args.help or not any(vars(args).values()):
-        print_help()
+    try:
+        # 1. Create an instance of the manager, it will automatically load the configuration.
+        releaser = ReleaseManager()
 
-    gh_token = os.getenv("GH_TOKEN")
-    if not gh_token:
-        console.print("[bold red]ERROR: GH_TOKEN is missing in .env or ENV![/]")
+        # 2. Run the release process with arguments from the CLI.
+        releaser.run(dry_run=args.dry_run, push=args.push)
+
+    except ReleaseFailedError as e:
+        # 3. Handle defined errors from the release process.
+        print(f"\n❌ Release Failed: {e}", file=sys.stderr)
         sys.exit(1)
-    else:
-        console.print(f"[bold green]GH_TOKEN loaded: {gh_token[:8]}***[/]")
-
-    if args.next_version:
-        run_cmd(
-            ["poetry", "run", "semantic-release", "version", "--print"],
-            "Show next semantic version",
-        )
-
-    if args.next_tag:
-        run_cmd(
-            ["poetry", "run", "semantic-release", "version", "--print-tag"],
-            "Show next tag",
-        )
-
-    if args.dry_run:
-        run_cmd(
-            ["poetry", "run", "semantic-release", "publish", "--dry-run"],
-            "Dry-run publish (simulate, nothing pushed)",
-        )
-
-    if args.version_step:
-        run_cmd(
-            ["poetry", "run", "semantic-release", "version"],
-            "Run versioning step only (bump version, changelog, tag, commit, no publish)",
-        )
-
-    if args.changelog:
-        run_cmd(
-            ["poetry", "run", "semantic-release", "changelog"],
-            "Generate changelog for next release",
-        )
-
-    if args.release:
-        console.print(
-            "[yellow]You are about to run the REAL semantic-release publish![/]"
-        )
-        answer = input("Continue with actual release? (y/N): ").strip().lower()
-        if answer == "y":
-            run_cmd(
-                ["poetry", "run", "semantic-release", "publish"],
-                "Publish (real release)",
-            )
-        else:
-            console.print("[bold red]Release aborted by user.[/]")
-            sys.exit(0)
+    except Exception as e:
+        # 4. Handle other unexpected errors for debugging.
+        print(f"\n❌ An unexpected error occurred: {e}", file=sys.stderr)
+        # For better debugging, you can print the traceback
+        # import traceback
+        # traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
