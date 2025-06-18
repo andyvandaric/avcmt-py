@@ -45,7 +45,11 @@ def main():
         releaser = ReleaseManager()
 
         # 2. Run the release process with arguments from the CLI.
-        releaser.run(dry_run=args.dry_run, push=args.push)
+        new_version = releaser.run(dry_run=args.dry_run, push=args.push)
+
+        # If successful and there is a new version, print it to stdout
+        if new_version:
+            print(new_version)
 
     except ReleaseFailedError as e:
         # 3. Handle defined errors from the release process.
