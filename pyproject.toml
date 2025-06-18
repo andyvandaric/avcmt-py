@@ -1,30 +1,32 @@
+[build-system]
+requires = [ "poetry-core",]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "avcmt-py"
 version = "1.0.0"
 description = "avcmt-py: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
-authors = ["Andy Vandaric <andyvandaric@gmail.com>"]
-license = "MIT"
+authors = [ "Andy Vandaric <andyvandaric@gmail.com>",]
+license = "Apache-2.0"
 readme = "README.md"
-packages = [{ include = "avcmt" }]
-include = ["avcmt/*"]
+include = [ "avcmt/*",]
+[[tool.poetry.packages]]
+include = "avcmt"
 
-[tool.semantic_release]
-version_variable = ["pyproject.toml:version"]  # Version will be read from and updated here
-version_source = "commit"                         # Recommended: for Automatic Versioning
-commit_author = "Andy Vandaric <andyvandaric@gmail.com>"
-branch = "main"                                # Set to your default branch
-build_command = "poetry build"
-upload_to_pypi = true                         # Set to true if you want to auto-upload to PyPI
-upload_to_release = true                      # Set to true if you want to auto-create GitHub Releases
-repository = "https://github.com/andyvandaric/avcmt-py"  # Remote repository URL (optional if local-only)
-
-[tool.semantic_release.changelog.default_templates]
+[tool.avcmt.release]
+version_path = "pyproject.toml:tool.poetry.version"
 changelog_file = "CHANGELOG.md"
+branch = "main"
+publish_to_pypi = true
+repo_url = "https://github.com/andyvandaric/avcmt-py"
+
+[tool.ruff]
+target-version = "py310"
 
 [tool.poetry.urls]
-"Homepage" = "https://avcmt.avandaric.live"      # Your main landingpage or docs site
-"Repository" = "https://github.com/andyvandaric/avcmt-py"  # The actual code repository
-"Documentation" = "https://avcmt.avandaric.live/docs"       # (optional, for direct link to docs)
+Homepage = "https://avcmt.avandaric.live"
+Repository = "https://github.com/andyvandaric/avcmt-py"
+Documentation = "https://avcmt.avandaric.live/docs"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -44,6 +46,26 @@ helper = "scripts.helper:main"
 preflight = "scripts.preflight:main"
 semrel = "scripts.semrel:main"
 
+[tool.ruff.lint]
+preview = true
+select = [ "E", "F", "I", "N", "UP", "B", "C90", "SIM", "TID", "PL", "PTH", "NPY", "PD", "PERF", "RUF",]
+fixable = [ "ALL",]
+ignore = [ "D", "ANN", "COM812", "ISC001", "T201", "S603", "S607", "S404", "PTH", "S701", "B904", "TRY003", "EM102", "E501", "PERF203", "PLR0913", "PLR0917",]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [ "F401",]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = [ "avcmt",]
+
 [tool.poetry.group.dev.dependencies]
 python-dotenv = "^1.1.0"
 ruff = "^0.11.13"
@@ -51,37 +73,3 @@ pre-commit = "^4.2.0"
 python-semantic-release = "^10.1.0"
 rich = "^14.0.0"
 toml = "^0.10.2"
-
-[tool.ruff]
-target-version = "py310"
-
-[tool.ruff.lint]
-preview = true
-select = ["E", "F", "I", "N", "UP", "B", "C90", "SIM", "TID", "PL", "PTH", "NPY", "PD", "PERF", "RUF"]
-fixable = ["ALL"]
-ignore = [
-  "D", "ANN",           # docstring dan typing
-  "COM812", "ISC001",   # trailing comma/semicolon
-  "T201", "S603", "S607", "S404",  # print dan subprocess warning
-  "PTH",                # pathlib enforcement (opsional)
-  "S701", "B904", "TRY003", "EM102",  # exception handling
-  "E501",               # line too long
-  "PERF203",            # try-except in loop
-  "PLR0913",            # too many arguments in function definition
-  "PLR0917",            # too many positional arguments
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-
-[tool.ruff.lint.isort]
-combine-as-imports = true
-known-first-party = ["avcmt"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

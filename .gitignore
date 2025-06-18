@@ -28,13 +28,12 @@ desktop.ini
 dist/
 build/
 
+# ===== Local backup dir =====
+backup/
+
 # ===== Poetry Lock & Cache (keep lock file, ignore cache) =====
-poetry.lock
 .poetry-cache/
 .poetry/
-
-# ===== Pre-commit Hooks Local Cache =====
-.git/hooks/
 
 # ===== Log, Output, Temp =====
 log/
