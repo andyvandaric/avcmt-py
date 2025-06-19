@@ -18,14 +18,14 @@
 
 import typer
 
-# Import absolute dari dalam package
+# Import absolute from within the package
 from avcmt.modules.release_manager import ReleaseFailedError, ReleaseManager
 from avcmt.utils import setup_logging
 
-# Inisialisasi logger untuk modul ini
+# Initialize logger for this module
 logger = setup_logging("log/release_cli.log")
 
-# Buat instance Typer untuk sub-command 'release'
+# Create Typer instance for the 'release' sub-command
 app = typer.Typer(
     name="release",
     help="📦 Manage project releases (Semantic Release style).",
@@ -34,7 +34,7 @@ app = typer.Typer(
 )
 
 
-# Logika utama rilis sekarang menjadi sub-command 'run'
+# The main release logic is now a sub-command 'run'
 @app.command("run")
 def run_release_command(
     dry_run: bool = typer.Option(
@@ -92,9 +92,9 @@ def run_release_command(
         raise typer.Exit(code=1)
 
 
-# Jika ingin menambahkan sub-command lain di bawah 'release' di masa depan,
-# bisa ditambahkan di sini menggunakan @app.command()
-# Contoh:
+# If you want to add other sub-commands under 'release' in the future,
+# you can add them here using @app.command()
+# Example:
 # @app.command()
 # def status():
 #     """Show current release status."""
