@@ -126,9 +126,22 @@ class CommitManager:
         self._run_git_command(["git", "commit", "-m", message])
 
     def _push_changes(self):
+        """Pushes all commits to the active remote branch and provides next steps."""
         self.logger.info("Pushing all commits to the active remote branch...")
         self._run_git_command(["git", "push"])
         self.logger.info("✔️ All changes pushed successfully.")
+
+        # --- Bagian yang Anda Sarankan (Dengan Sedikit Peningkatan) ---
+        self.logger.info("\n" + "=" * 50)
+        self.logger.info("💡 NEXT STEP: Synchronize with CI/CD Results")
+        self.logger.info(
+            "Your push has likely triggered a GitHub Action (e.g., release)."
+        )
+        self.logger.info(
+            "After the action completes, run the following command to get the updates:"
+        )
+        self.logger.info("    git pull origin main")
+        self.logger.info("=" * 50)
 
     def _prepare_for_run(self) -> list[str] | None:
         self.logger.info(
