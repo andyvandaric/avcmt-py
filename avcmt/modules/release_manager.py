@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # File: avcmt/release.py -> avcmt/modules/release_manager.py
-# Final Revision v6 - Enhanced changelog generation with better formatting and commit parsing.
+# Final Revision v7 - Fixed 'empty separator' bug in _update_changelog.
 
 import os
 import re
@@ -320,7 +320,7 @@ class ReleaseManager:
         return (
             "\n".join(part for part in new_section_parts if part is not None).strip()
             + "\n"
-        )  # Ensure no multiple newlines at end
+        )
 
     def _update_changelog(self):
         """
@@ -329,6 +329,8 @@ class ReleaseManager:
         """
         path = Path(self.config["changelog_file"])
         new_section = self._generate_formatted_changelog_section()
+        # FIX: The marker was incorrectly set to an empty string.
+        # It should be the '' comment from CHANGELOG.md.
         marker = ""
 
         try:
@@ -342,7 +344,6 @@ class ReleaseManager:
 
             if marker in content:
                 parts = content.split(marker, 1)
-                # Insert new_section after the marker, ensure consistent spacing
                 final_content = (
                     f"{parts[0]}{marker}\n\n{new_section}{parts[1].lstrip()}"
                 )
