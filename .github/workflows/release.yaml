@@ -51,7 +51,7 @@ jobs:
 
       - name: Run Internal Avcmt Release
         id: avcmt_release # Add id to reference the output
-        run: echo "version=$(poetry run semrel --push)" >> $GITHUB_OUTPUT
+        run: echo "version=$(poetry run avcmt release run --push)" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
