@@ -1,7 +1,19 @@
 # CHANGELOG
 
-<!-- version list -->
+<!-- avcmt-release-marker -->
 
+## v1.5.1 (2025-06-19)
+
+### 🐛 Bug Fixes
+- **fix(release_manager):** improve version file and changelog handling with validation and backward compatibility ([`a9fcadd`](https://github.com/andyvandaric/avcmt-py/commit/a9fcadd))
+- **fix(avcmt):** remove redundant render_prompt function and centralize Jinja2 environment setup ([`e896361`](https://github.com/andyvandaric/avcmt-py/commit/e896361))
+
+### 🧹 Chores
+- **chore(avcmt/modules):** fix changelog update to handle empty marker correctly ([`e8d280d`](https://github.com/andyvandaric/avcmt-py/commit/e8d280d))
+
+### 📦 Others
+- **other:** Merge pull request #5 from andyvandaric/fix/release_manager ([`fff2cc9`](https://github.com/andyvandaric/avcmt-py/commit/fff2cc9))
+- **other:** Merge pull request #4 from andyvandaric/feature/changelog ([`88b079f`](https://github.com/andyvandaric/avcmt-py/commit/88b079f))
 ## v1.5.0 (2025-06-19)
 
 ### Features
