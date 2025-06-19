@@ -1,8 +1,7 @@
 # =================================================================
 # File: avcmt/cli/main.py (REVISED)
 #
-# We will change how we register the command.
-# Instead of `add_typer`, we will use the `@app.command()` decorator.
+# We revert to using `add_typer` to register the entire command group.
 # =================================================================
 
 # Copyright 2025 Andy Vandaric
@@ -21,7 +20,6 @@
 
 # File: avcmt/cli/main.py
 # Description: Main entry point for the unified Typer CLI application.
-#              This file orchestrates all sub-commands.
 
 from pathlib import Path
 from typing import Annotated
@@ -30,8 +28,8 @@ import toml
 import typer
 
 # --- Sub-command Imports ---
-# CHANGE: We now import the function directly, not the whole module.
-from .commit import commit as commit_command
+# CHANGE: We now import the module as an 'app' to be added.
+from .commit import app as commit_app
 
 app = typer.Typer(
     name="avcmt",
@@ -85,7 +83,7 @@ def main_callback(
 # CHANGE: We now register the function as a command.
 # The decorator automatically handles converting the function's parameters
 # into CLI options like --dry-run, --push, etc.
-app.command("commit")(commit_command)
+app.add_typer(commit_app)
 
 # We will follow this new pattern for the 'release' command in the next task.
 

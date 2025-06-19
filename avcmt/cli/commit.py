@@ -1,8 +1,8 @@
 # =================================================================
-# File: avcmt/cli/commit.py (REVISED)
+# File: avcmt/cli/commit.py (REVISED FOR SUB-COMMANDS)
 #
-# We will simplify this file. It no longer needs its own Typer app.
-# It will just be a regular function that we import into main.py.
+# This file now defines a group of commands under `commit`.
+# The main logic is moved to a 'run' subcommand.
 # =================================================================
 
 # Copyright 2025 Andy Vandaric
@@ -20,23 +20,34 @@
 # limitations under the License.
 
 # File: avcmt/cli/commit.py
-# Description: CLI command logic for `avcmt commit`.
+# Description: CLI sub-command group for all `commit` related actions.
 
 from typing import Annotated
 
 import typer
 
 from avcmt.modules.commit_generator import run_commit_group_all
-from avcmt.utils import get_log_file, setup_logging
+from avcmt.utils import (
+    clear_dry_run_file,
+    get_log_file,
+    get_staged_files,
+    read_dry_run_file,
+    setup_logging,
+)
 
-# Import the business logic from the modules layer
+# Import the business logic and new utility functions
 
 
-# NOTE: The `app = typer.Typer(...)` instance is REMOVED from this file.
+# RE-INTRODUCED: A Typer app for the 'commit' command group.
+app = typer.Typer(
+    name="commit",
+    help="Generate AI-powered commits and manage related utilities.",
+    no_args_is_help=True,
+)
 
 
-# This is now a regular function, not a Typer callback.
-def commit(
+@app.command("run")
+def run_commit(
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -67,18 +78,15 @@ def commit(
     ] = False,
 ) -> None:
     """
-    Generates semantic commit messages for staged changes by grouping them
-    and using an AI provider.
+    Generates semantic commit messages for staged changes (main functionality).
     """
     log_file = get_log_file()
     logger = setup_logging(log_file)
     logger.info(f"Log file for this run: {log_file}")
-    logger.info("Invoking 'commit' command with options:")
+    logger.info("Invoking 'commit run' command with options:")
     logger.info(f"  dry_run: {dry_run}, push: {push}")
     logger.info(f"  debug: {debug}, force_rebuild: {force_rebuild}")
 
-    # This is the bridge: call the business logic from the `modules` layer
-    # and pass all the CLI options to it.
     run_commit_group_all(
         dry_run=dry_run,
         push=push,
@@ -86,3 +94,42 @@ def commit(
         force_rebuild=force_rebuild,
         logger=logger,
     )
+
+
+@app.command("clear-cache")
+def clear_cache() -> None:
+    """Deletes the dry-run cache file."""
+    if clear_dry_run_file():
+        typer.secho(
+            "✅ Dry-run cache file cleared successfully.", fg=typer.colors.GREEN
+        )
+    else:
+        typer.secho("[i] No dry-run cache file found to clear.", fg=typer.colors.YELLOW)
+
+
+@app.command("list-cached")
+def list_cached() -> None:
+    """Displays the content of the last dry-run cache."""
+    content = read_dry_run_file()
+    if content:
+        typer.secho("--- Last Cached Dry-Run Messages ---", fg=typer.colors.CYAN)
+        typer.echo(content)
+    else:
+        typer.secho("[i] No dry-run cache file found.", fg=typer.colors.YELLOW)
+
+
+@app.command("validate")
+def validate() -> None:
+    """Checks if there are any staged files ready to be committed."""
+    staged_files = get_staged_files()
+    if staged_files:
+        typer.secho(
+            f"✅ Found {len(staged_files)} staged file(s):", fg=typer.colors.GREEN
+        )
+        for file in staged_files:
+            typer.echo(f"- {file}")
+    else:
+        typer.secho(
+            "❌ No staged files found. Use 'git add <files>' to stage changes.",
+            fg=typer.colors.RED,
+        )
