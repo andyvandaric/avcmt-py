@@ -17,6 +17,7 @@
 
 import logging
 import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -117,3 +118,35 @@ def setup_logging(log_file: Path | str = "commit_group_all.log"):
         sh.setFormatter(formatter)
         logger.addHandler(sh)
     return logger
+
+
+def get_staged_files() -> list[str]:
+    """Returns a list of staged files."""
+    try:
+        output = subprocess.run(
+            ["git", "diff", "--name-only", "--cached"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        return [line for line in output.splitlines() if line]
+    except subprocess.CalledProcessError:
+        return []
+
+
+def read_dry_run_file() -> str | None:
+    """Reads the content of the dry-run cache file."""
+    filepath = get_dry_run_file()
+    if not filepath.exists():
+        return None
+    with filepath.open(encoding="utf-8") as f:
+        return f.read()
+
+
+def clear_dry_run_file() -> bool:
+    """Deletes the dry-run cache file."""
+    filepath = get_dry_run_file()
+    if filepath.exists():
+        filepath.unlink()
+        return True
+    return False
