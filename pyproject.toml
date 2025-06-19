@@ -25,9 +25,11 @@ Documentation = "https://avcmt.avandaric.live/docs"
 python = "^3.10"
 requests = "^2.32"
 rich = "^14.0.0"
+typer = {extras = ["all"], version = "^0.12.3"}
+toml = "^0.10.2" # Add toml for reading pyproject.toml
 
 [tool.poetry.scripts]
-avcmt = "avcmt.cli:main"
+avcmt = "avcmt.cli.main:app"
 clean = "scripts.clean:main"
 format = "scripts.format:main"
 lintfix = "scripts.lintfix:main"
@@ -70,4 +72,3 @@ python-dotenv = "^1.0.1"
 ruff = "^0.11.13"
 pre-commit = "^4.2.0"
 python-semantic-release = "^10.1.0"
-toml = "^0.10.2"
