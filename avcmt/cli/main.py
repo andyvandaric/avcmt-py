@@ -1,3 +1,9 @@
+# =================================================================
+# File: avcmt/cli/main.py (REVISED)
+#
+# We revert to using `add_typer` to register the entire command group.
+# =================================================================
+
 # Copyright 2025 Andy Vandaric
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +20,6 @@
 
 # File: avcmt/cli/main.py
 # Description: Main entry point for the unified Typer CLI application.
-#              This file orchestrates all sub-commands.
 
 from pathlib import Path
 from typing import Annotated
@@ -22,13 +27,10 @@ from typing import Annotated
 import toml
 import typer
 
-# --- Sub-command Imports (will be activated in subsequent tasks) ---
-# from . import commit as commit_app
-# from . import release as release_app
+# --- Sub-command Imports ---
+# CHANGE: We now import the module as an 'app' to be added.
+from .commit import app as commit_app
 
-
-# Create the main Typer application instance.
-# This is the root of our CLI.
 app = typer.Typer(
     name="avcmt",
     help="avcmt-py: AI-Powered Git Commit & Release Automation.",
@@ -36,6 +38,8 @@ app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="markdown",
 )
+
+# ... (your existing _version_callback function remains here) ...
 
 
 def _version_callback(value: bool) -> None:
@@ -56,7 +60,7 @@ def _version_callback(value: bool) -> None:
 
 
 @app.callback()
-def main(
+def main_callback(
     version: Annotated[
         bool | None,
         typer.Option(
@@ -70,19 +74,18 @@ def main(
 ) -> None:
     """
     AI-Powered toolkit for development automation.
-
     Use `avcmt [COMMAND] --help` for more information on a specific command.
     """
-    # This main callback will run before any command.
-    # It's a good place for global setup if needed.
     pass
 
 
 # --- Register Sub-commands ---
-# As we implement features, we will add them here.
-# Example: app.add_typer(commit_app.app, name="commit")
-# Example: app.add_typer(release_app.app, name="release")
+# CHANGE: We now register the function as a command.
+# The decorator automatically handles converting the function's parameters
+# into CLI options like --dry-run, --push, etc.
+app.add_typer(commit_app)
 
+# We will follow this new pattern for the 'release' command in the next task.
 
 if __name__ == "__main__":
     app()
