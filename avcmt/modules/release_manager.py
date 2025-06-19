@@ -66,6 +66,17 @@ class ReleaseManager:
         self.new_version: str | None = None
         self.commits: list[dict[str, str]] = []
 
+        # Validate and parse version_path once on initialization.
+        try:
+            self.version_file_path, self.version_key_path = self.config[
+                "version_path"
+            ].split(":", 1)
+        except ValueError:
+            raise ReleaseFailedError(
+                f"Invalid 'version_path' format: '{self.config['version_path']}'. "
+                "Expected format is 'file:key.path'."
+            ) from None
+
     # --- Static Methods (Stateless Utilities) ---
 
     @staticmethod
@@ -189,10 +200,9 @@ class ReleaseManager:
 
     def _update_version_file(self):
         """Updates the version in the file specified in the instance's config."""
-        path, key_path = self.config["version_path"].split(":", 1)
-        keys = key_path.split(".")
+        keys = self.version_key_path.split(".")
         try:
-            with Path(path).open("r+", encoding="utf-8") as f:
+            with Path(self.version_file_path).open("r+", encoding="utf-8") as f:
                 data = toml.load(f)
                 # Traverse to update the version
                 temp_data = data
@@ -204,10 +214,12 @@ class ReleaseManager:
                 f.seek(0)
                 toml.dump(data, f)
                 f.truncate()
-            logger.info(f"Updated version in {path} to {self.new_version.strip('v')}")
+            logger.info(
+                f"Updated version in {self.version_file_path} to {self.new_version.strip('v')}"
+            )
         except (FileNotFoundError, KeyError, Exception) as e:
             raise ReleaseFailedError(
-                f"Failed to update version file {path}: {e}"
+                f"Failed to update version file {self.version_file_path}: {e}"
             ) from e
 
     @staticmethod
@@ -325,31 +337,42 @@ class ReleaseManager:
     def _update_changelog(self):
         """
         Updates the changelog file by inserting the new formatted section
-        at the correct position using a precise split method.
+        at the correct position, ensuring backward compatibility with old markers.
         """
         path = Path(self.config["changelog_file"])
         new_section = self._generate_formatted_changelog_section()
-        # FIX: The marker was incorrectly set to an empty string.
-        # It should be the '' comment from CHANGELOG.md.
-        marker = ""
+
+        new_marker = "<!-- avcmt-release-marker -->"
+        legacy_marker = "<!-- version list -->"
 
         try:
             content = ""
             if path.exists():
                 with path.open(encoding="utf-8") as f:
                     content = f.read()
+
+                # For backward compatibility, replace the old marker with the new one in memory.
+                if legacy_marker in content:
+                    logger.info(
+                        f"Found legacy marker '{legacy_marker}'. Migrating to '{new_marker}'."
+                    )
+                    content = content.replace(legacy_marker, new_marker, 1)
+
             else:
                 logger.info(f"Changelog file not found at {path}. Creating a new one.")
-                content = f"# CHANGELOG\n\n{marker}\n"
+                # Create the file with a title and the new marker for future releases.
+                content = f"# CHANGELOG\n\n{new_marker}\n"
 
-            if marker in content:
-                parts = content.split(marker, 1)
+            # Now, the logic only needs to deal with the new_marker.
+            if new_marker in content:
+                parts = content.split(new_marker, 1)
                 final_content = (
-                    f"{parts[0]}{marker}\n\n{new_section}{parts[1].lstrip()}"
+                    f"{parts[0]}{new_marker}\n\n{new_section}{parts[1].lstrip()}"
                 )
             else:
+                # This case now only happens if the file exists but has NO marker at all.
                 logger.warning(
-                    f"Marker '{marker}' not found in {path}. Prepending content."
+                    f"No release marker found in {path}. Prepending content."
                 )
                 final_content = f"{new_section}\n{content}"
 
@@ -362,7 +385,7 @@ class ReleaseManager:
     def _commit_and_tag(self):
         """Commits and tags the new version."""
         files_to_add = [
-            self.config["version_path"].split(":")[0],
+            self.version_file_path,
             self.config["changelog_file"],
         ]
         self._run_command(["git", "add", *files_to_add])
