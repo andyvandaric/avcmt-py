@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.3.0 (2025-06-19)
+
+### Features
+- feat(scripts): migrate to pathlib for file and directory operations ([`1ba7b5c`](https://github.com/andyvandaric/avcmt-py/commit/1ba7b5c))
+
+### Bug Fixes
+- fix: Bump urllib3 to version 2.5.0 and update associated lockfile hashes ([`6cca949`](https://github.com/andyvandaric/avcmt-py/commit/6cca949))
+- fix(avcmt): replace os.path with pathlib for path handling and improve file operations ([`7e1ba25`](https://github.com/andyvandaric/avcmt-py/commit/7e1ba25))
+
+### Chores
+- Merge branch 'fix/linter-path-errors' ([`812039e`](https://github.com/andyvandaric/avcmt-py/commit/812039e))
+- chore(avcmt): improve logging messages in commit workflow ([`8d30dce`](https://github.com/andyvandaric/avcmt-py/commit/8d30dce))
+- chore(avcmt): improve logging messages in commit workflow ([`2e4d2a6`](https://github.com/andyvandaric/avcmt-py/commit/2e4d2a6))
+- chore(avcmt): improve push process and add user guidance ([`8ccbbae`](https://github.com/andyvandaric/avcmt-py/commit/8ccbbae))
+
+
 ## v1.2.0 (2025-06-19)
 
 ### Features

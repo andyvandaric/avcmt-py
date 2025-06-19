@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "avcmt-py"
-version = "1.2.0"
+version = "1.3.0"
 description = "avcmt-py: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
 authors = [ "Andy Vandaric <andyvandaric@gmail.com>",]
 license = "Apache-2.0"
@@ -13,12 +13,8 @@ include = [ "avcmt/*",]
 [[tool.poetry.packages]]
 include = "avcmt"
 
-[tool.avcmt.release]
-version_path = "pyproject.toml:tool.poetry.version"
-changelog_file = "CHANGELOG.md"
-branch = "main"
-publish_to_pypi = true
-repo_url = "https://github.com/andyvandaric/avcmt-py"
+[tool.ruff]
+target-version = "py310"
 
 [tool.poetry.urls]
 Homepage = "https://avcmt.avandaric.live"
@@ -41,8 +37,12 @@ helper = "scripts.helper:main"
 preflight = "scripts.preflight:main"
 semrel = "scripts.semrel:main"
 
-[tool.ruff]
-target-version = "py310"
+[tool.avcmt.release]
+version_path = "pyproject.toml:tool.poetry.version"
+changelog_file = "CHANGELOG.md"
+branch = "main"
+publish_to_pypi = true
+repo_url = "https://github.com/andyvandaric/avcmt-py"
 
 [tool.ruff.lint]
 preview = true
