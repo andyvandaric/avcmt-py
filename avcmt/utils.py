@@ -13,13 +13,15 @@
 # limitations under the License.
 
 # File: avcmt/utils.py
-# Revision v2 - Added clean_ai_response and simplified extraction logic.
+# Revision v3 - Added clean_ai_response, simplified extraction, and reusable Jinja2 environment setup.
 
 import logging
 import re
 import subprocess
 import time
 from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader  # ADDED: Import Jinja2
 
 
 def get_log_dir() -> Path:
@@ -150,3 +152,40 @@ def clear_dry_run_file() -> bool:
         filepath.unlink()
         return True
     return False
+
+
+# NEW FUNCTION: Reusable Jinja2 environment setup
+def get_jinja_env(template_sub_dir: str | Path) -> Environment:
+    """
+    Returns a Jinja2 Environment configured to load templates from a specific
+    sub-directory within 'avcmt/prompt_templates'.
+
+    Args:
+        template_sub_dir (str | Path): The sub-directory within 'avcmt/prompt_templates'
+                                       where the templates are located (e.g., "commit", "changelog").
+
+    Returns:
+        Environment: Configured Jinja2 environment.
+    """
+    # Root of all prompt templates
+    root_template_dir = Path(__file__).parent / "prompt_templates"
+
+    # Combined path to the specific sub-directory
+    full_template_path = root_template_dir / template_sub_dir
+
+    return Environment(loader=FileSystemLoader(full_template_path))
+
+
+__all__ = [
+    "clean_ai_response",
+    "clear_dry_run_file",
+    "extract_commit_messages_from_md",
+    "get_dry_run_file",
+    "get_jinja_env",  # ADDED to __all__
+    "get_log_dir",
+    "get_log_file",
+    "get_staged_files",
+    "is_recent_dry_run",
+    "read_dry_run_file",
+    "setup_logging",
+]
