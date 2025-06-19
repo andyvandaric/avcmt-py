@@ -66,13 +66,16 @@ def run_release_command(
         # 2. Run the release process with arguments from the CLI.
         new_version = releaser.run(dry_run=dry_run, push=push)
 
-        # If successful and there is a new version, print it to stdout (for CI/CD output)
+        # Perubahan: Hanya cetak nomor versi ke stdout untuk penangkapan CI/CD.
+        # Pesan deskriptif lain harus ke logger.info atau typer.echo(..., err=True)
         if new_version:
-            typer.echo(f"New version released: {new_version}")
+            typer.echo(new_version)  # HANYA mencetak versi, tanpa teks tambahan
             logger.info(f"Release process finished. New version: {new_version}")
         else:
-            typer.echo(
-                "No new version released (e.g., no semantic commits or dry-run)."
+            # Jika tidak ada versi baru, output pesan deskriptif ke stderr atau log
+            typer.secho(
+                "No new version released (e.g., no semantic commits or dry-run).",
+                err=True,
             )
             logger.info("Release process finished. No new version released.")
 
