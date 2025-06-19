@@ -3,6 +3,7 @@
 
 import os
 import shutil
+from pathlib import Path
 
 from avcmt.utils import setup_logging
 
@@ -16,7 +17,7 @@ def remove_pycache_and_pyc():
         # Hapus direktori __pycache__
         for dir_name in dirs:
             if dir_name == "__pycache__":
-                dir_path = os.path.join(root, dir_name)
+                dir_path = Path(root) / dir_name
                 try:
                     shutil.rmtree(dir_path)
                     logger.info(f"Removed directory: {dir_path}")
@@ -27,9 +28,9 @@ def remove_pycache_and_pyc():
         # Hapus file .pyc / .pyo
         for file_name in files:
             if file_name.endswith((".pyc", ".pyo")):
-                file_path = os.path.join(root, file_name)
+                file_path = Path(root) / file_name
                 try:
-                    os.remove(file_path)
+                    file_path.unlink()
                     logger.info(f"Removed file: {file_path}")
                     removed_files += 1
                 except Exception as e:
