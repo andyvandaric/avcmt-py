@@ -16,32 +16,33 @@
 # Revision v2 - Added clean_ai_response and simplified extraction logic.
 
 import logging
-import os
 import re
 import time
+from pathlib import Path
 
 
-def get_log_dir():
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "log")
-    os.makedirs(log_dir, exist_ok=True)
+def get_log_dir() -> Path:
+    log_dir = Path(__file__).parent.parent / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
 
-def get_log_file():
-    return os.path.join(get_log_dir(), "commit_group_all.log")
+def get_log_file() -> Path:
+    return get_log_dir() / "commit_group_all.log"
 
 
-def get_dry_run_file():
-    return os.path.join(get_log_dir(), "commit_messages_dry_run.md")
+def get_dry_run_file() -> Path:
+    return get_log_dir() / "commit_messages_dry_run.md"
 
 
-def is_recent_dry_run(file_path, max_age_minutes=10):
+def is_recent_dry_run(file_path: Path | str, max_age_minutes=10) -> bool:
     """
     Cek apakah file dry-run commit masih dalam rentang waktu tertentu (default 10 menit).
     """
-    if not os.path.exists(file_path):
+    path = Path(file_path)
+    if not path.exists():
         return False
-    mtime = os.path.getmtime(file_path)
+    mtime = path.stat().st_mtime
     return (time.time() - mtime) <= max_age_minutes * 60
 
 
@@ -76,15 +77,16 @@ def clean_ai_response(raw_message: str) -> str:
     return "\n".join(commit_lines).strip()
 
 
-def extract_commit_messages_from_md(filepath: str) -> dict[str, str]:
+def extract_commit_messages_from_md(filepath: Path | str) -> dict[str, str]:
     """
     Mengekstrak pesan commit per grup dari file Markdown dry-run.
     Versi ini lebih sederhana karena diasumsikan file sudah bersih.
     """
-    if not os.path.exists(filepath):
+    path = Path(filepath)
+    if not path.exists():
         return {}
 
-    with open(filepath, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         content = f.read()
 
     messages = {}
@@ -98,16 +100,16 @@ def extract_commit_messages_from_md(filepath: str) -> dict[str, str]:
     return messages
 
 
-def setup_logging(log_file="commit_group_all.log"):
+def setup_logging(log_file: Path | str = "commit_group_all.log"):
     logger = logging.getLogger(__name__)
     if not logger.hasHandlers():
-        log_dir = os.path.dirname(log_file)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
 
-        fh = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 

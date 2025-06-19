@@ -20,6 +20,7 @@ import re
 import subprocess
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import toml
@@ -175,7 +176,7 @@ class ReleaseManager:
         path, key_path = self.config["version_path"].split(":", 1)
         keys = key_path.split(".")
         try:
-            with open(path, "r+", encoding="utf-8") as f:
+            with Path(path).open("r+", encoding="utf-8") as f:
                 data = toml.load(f)
                 # Traverse to update the version
                 temp_data = data
@@ -246,14 +247,14 @@ class ReleaseManager:
         Updates the changelog file by inserting the new formatted section
         at the correct position using a precise split method.
         """
-        path = self.config["changelog_file"]
+        path = Path(self.config["changelog_file"])
         new_section = self._generate_formatted_changelog_section()
         marker = "<!-- version list -->"
 
         try:
             content = ""
-            if os.path.exists(path):
-                with open(path, encoding="utf-8") as f:
+            if path.exists():
+                with path.open(encoding="utf-8") as f:
                     content = f.read()
             else:
                 logger.info(f"Changelog file not found at {path}. Creating a new one.")
@@ -268,7 +269,7 @@ class ReleaseManager:
                 )
                 final_content = f"{new_section}\n{content}"
 
-            with open(path, "w", encoding="utf-8") as f:
+            with path.open("w", encoding="utf-8") as f:
                 f.write(final_content)
             logger.info(f"Updated {path} with version {self.new_version}")
         except Exception as e:
