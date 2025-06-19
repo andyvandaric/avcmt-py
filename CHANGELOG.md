@@ -2,6 +2,12 @@
 
 <!-- version list -->
 
+## v1.4.1 (2025-06-19)
+
+### Bug Fixes
+- fix(cli): simplify version output in release process ([`216f28c`](https://github.com/andyvandaric/avcmt-py/commit/216f28c))
+
+
 ## v1.4.0 (2025-06-19)
 
 ### Features
