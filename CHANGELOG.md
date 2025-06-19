@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.4.0 (2025-06-19)
+
+### Features
+- feat(cli): introduce 'release' command with 'run' sub-command for project release management ([`16da695`](https://github.com/andyvandaric/avcmt-py/commit/16da695))
+- feat(cli): add release sub-command with semantic release functionality ([`67e1a6a`](https://github.com/andyvandaric/avcmt-py/commit/67e1a6a))
+- feat(avcmt): add utilities for git staging and dry-run cache management ([`9a7995f`](https://github.com/andyvandaric/avcmt-py/commit/9a7995f))
+- feat(cli): organize commit subcommands and utilities ([`c1cd8fe`](https://github.com/andyvandaric/avcmt-py/commit/c1cd8fe))
+- feat(cli): add 'commit' sub-command for semantic commit messaging in avcmt ([`6182779`](https://github.com/andyvandaric/avcmt-py/commit/6182779))
+- feat(cli): implement unified CLI with Typer (#1) ([`ae1ce82`](https://github.com/andyvandaric/avcmt-py/commit/ae1ce82))
+
+### Refactoring
+- refactor(modules): improve file existence check in commit_generator ([`a497e82`](https://github.com/andyvandaric/avcmt-py/commit/a497e82))
+
+### Chores
+- chore(release): update release command in workflows ([`f394c0e`](https://github.com/andyvandaric/avcmt-py/commit/f394c0e))
+- Merge pull request #3 from andyvandaric/refactor/migrate-release ([`7a84d12`](https://github.com/andyvandaric/avcmt-py/commit/7a84d12))
+- Merge pull request #2 from andyvandaric/refactor/refactor/migrate-commit ([`a8bb8b8`](https://github.com/andyvandaric/avcmt-py/commit/a8bb8b8))
+
+
 ## v1.3.0 (2025-06-19)
 
 ### Features
