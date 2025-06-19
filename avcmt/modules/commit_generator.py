@@ -81,16 +81,27 @@ class CommitGenerator:
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             error_message = (
-                f"Git command '{' '.join(command)}' failed: {e.stderr.strip()}"
+                f"Git command '{' '.join(e.cmd)}' failed: {e.stderr.strip()}"
             )
             self.logger.error(error_message)
             raise CommitError(error_message) from e
 
     def _get_changed_files(self) -> list[str]:
+        # Original logic to get files from Git
         output = self._run_git_command(
             ["git", "ls-files", "--others", "--modified", "--exclude-standard"]
         )
-        return [line.strip() for line in output.split("\n") if line.strip()]
+        detected_files = [line.strip() for line in output.split("\n") if line.strip()]
+
+        # Filter out files that do not physically exist
+        existing_files = []
+        for file_path_str in detected_files:
+            file_path = Path(file_path_str)
+            if file_path.is_file():  # Ensure it is a file and exists
+                existing_files.append(file_path_str)
+            else:
+                self.logger.warning(f"⏩ Skipping non-existent file: {file_path_str}")
+        return existing_files
 
     @staticmethod
     def _group_files_by_directory(files: list[str]) -> dict[str, list[str]]:
@@ -135,6 +146,7 @@ class CommitGenerator:
         self._run_git_command(["git", "push"])
         self.logger.info("✔️ All changes pushed successfully.")
 
+        # --- Suggested Section (With Minor Improvements) ---
         self.logger.info("\n")
         self.logger.info("💡 NEXT STEP: Synchronize with CI/CD Results")
         self.logger.info(
@@ -175,7 +187,7 @@ class CommitGenerator:
         self.logger.info(f"--- Processing group: {group_name} ---")
 
         if self.dry_run:
-            self._stage_changes(files)
+            self._stage_changes(files)  # This is line 178 that triggers the error
         diff = self._get_diff_for_files(files)
 
         if not diff.strip():
