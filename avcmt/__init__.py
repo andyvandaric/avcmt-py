@@ -1,3 +1,5 @@
+# Copyright 2025 Andy Vandaric
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,23 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+This file defines the public API of the 'avcmt' package, making key components
+directly importable for users of the library.
+"""
 
-# File: avcmt/__init__.py
-# Deskripsi: Mendefinisikan API publik untuk paket avcmt.
+# Expose the primary function for the commit process from its new location.
+# This allows users to do `from avcmt import run_commit_group_all`.
+from .modules.commit_generator import run_commit_group_all
 
-# Mengekspos fungsi utama untuk proses commit sebagai bagian dari API publik.
-# Pengguna paket Anda akan mengimpor ini.
-from .commit import run_commit_group_all
+# Expose classes and errors from the release module from its new location.
+# This allows `from avcmt import ReleaseManager`.
+from .modules.release_manager import ReleaseFailedError, ReleaseManager
 
-# Mengekspos kelas dan error dari modul release juga merupakan praktik yang baik,
-# jika Anda ingin pengguna dapat menggunakannya secara terprogram.
-from .release import ReleaseFailedError, ReleaseManager
-
-# Mengekspos fungsi utilitas yang mungkin berguna bagi pengguna eksternal (opsional).
-# Untuk saat ini, kita biarkan internal untuk menjaga API tetap bersih.
-# from .utils import setup_logging
-
-# Mendefinisikan apa yang akan diimpor saat pengguna melakukan `from avcmt import *`
+# Defines what will be imported when a user runs `from avcmt import *`.
+# It's a good practice to explicitly list the public API.
 __all__ = [
     "ReleaseFailedError",
     "ReleaseManager",

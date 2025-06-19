@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# File: avcmt/commit.py
-# Revision v8 - Moved cleaning logic to utils.py
+# File: avcmt/modules/commit_generator.py
+# Description: Business logic for generating AI-powered commit messages.
+#              Refactored from the original commit.py as part of Task 1.1.
 
 import subprocess
 from collections import defaultdict
@@ -22,10 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from avcmt.ai import generate_with_ai, render_prompt
-
-# --- MENGIMPOR FUNGSI DARI UTILS ---
 from avcmt.utils import (
-    clean_ai_response,  # <-- Fungsi pembersih sekarang di sini
+    clean_ai_response,
     extract_commit_messages_from_md,
     is_recent_dry_run,
     setup_logging,
@@ -33,12 +32,15 @@ from avcmt.utils import (
 
 
 class CommitError(Exception):
-    """Custom exception for failures during the commit process."""
+    """Custom exception for failures during the commit generation process."""
 
     pass
 
 
-class CommitManager:
+# CLASS RENAME: CommitManager -> CommitGenerator
+# The class is renamed to better reflect its role as a "generator"
+# in the new modular architecture, as per the roadmap.
+class CommitGenerator:
     """
     Manages the AI-powered commit generation process, from staging changes
     to creating grouped commits.
@@ -133,7 +135,6 @@ class CommitManager:
         self._run_git_command(["git", "push"])
         self.logger.info("✔️ All changes pushed successfully.")
 
-        # --- Suggested Section (With Minor Improvements) ---
         self.logger.info("\n")
         self.logger.info("💡 NEXT STEP: Synchronize with CI/CD Results")
         self.logger.info(
@@ -146,7 +147,7 @@ class CommitManager:
 
     def _prepare_for_run(self) -> list[str] | None:
         self.logger.info(
-            f"Starting CommitManager: dry_run={self.dry_run}, push={self.push}, force_rebuild={self.force_rebuild}"
+            f"Starting CommitGenerator: dry_run={self.dry_run}, push={self.push}, force_rebuild={self.force_rebuild}"
         )
         initial_files = self._get_changed_files()
         if not initial_files:
@@ -199,7 +200,6 @@ class CommitManager:
                 debug=self.debug,
                 **self.kwargs,
             )
-            # --- MEMANGGIL FUNGSI DARI UTILS ---
             commit_message = clean_ai_response(raw_message)
 
         self.logger.info(f"Suggested message for {group_name}:\n{commit_message}")
@@ -256,10 +256,11 @@ class CommitManager:
 
 
 def run_commit_group_all(**kwargs):
-    """Initializes and runs the CommitManager."""
+    """Initializes and runs the CommitGenerator."""
     try:
-        manager = CommitManager(**kwargs)
-        manager.run()
+        # INSTANTIATION UPDATE: Use the new class name
+        generator = CommitGenerator(**kwargs)
+        generator.run()
     except (CommitError, Exception) as e:
         logger = setup_logging("log/commit.log")
         logger.error(f"FATAL: The commit process failed: {e}", exc_info=True)
