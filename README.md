@@ -1,7 +1,6 @@
 # AVCMT-PY - AI-Powered Semantic Release Style Git Commit Automation for Python Projects
 
-[![PyPI version](https://img.shields.io/pypi/v/avcmt-py.svg)](https://pypi.org/project/avcmt-py/) [![Downloads](https://static.pepy.tech/badge/avcmt-py)](https://pepy.tech/project/avcmt-py) [![License](https://img.shields.io/github/license/andyvandaric/avcmt-py)](LICENSE) [![CI](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml/badge.svg)](https://github.com/andyvandaric/avcmt-py/actions/workflows/ci.yml) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
-[![Ruff](https://img.shields.io/badge/Ruff-%20-fastapi?style=for-the-badge&labelColor=202020&logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/) [![PyPI](https://img.shields.io/badge/pypi-v0.11.13-orange?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/ruff/) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](https://opensource.org/licenses/MIT) [![Python Versions](https://img.shields.io/badge/%203.10%20|%203.11%20|%203.12%20|%203.13-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/) [![CI](https://img.shields.io/badge/main-passing-brightgreen?style=for-the-badge&logo=github)](https://github.com/andyvandaric/avcmt-py/actions)
+[![PyPI version](https://img.shields.io/pypi/v/avcmt-py.svg)](https://pypi.org/project/avcmt-py/) [![Downloads](https://static.pepy.tech/badge/avcmt-py)](https://pepy.tech/project/avcmt-py) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE) [![Ruff](https://img.shields.io/badge/Ruff-%20-fastapi?style=for-the-badge&labelColor=202020&logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/) [![PyPI](https://img.shields.io/badge/pypi-v0.11.13-orange?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/ruff/) [![CI](https://img.shields.io/badge/main-passing-brightgreen?style=for-the-badge&logo=github)](https://github.com/andyvandaric/avcmt-py/actions)
 
 
 Tired of manually crafting Git commit messages? Supercharge your Python development workflow with **[avcmt-py](https://github.com/andyvandaric/avcmt-py)**, the intelligent CLI tool that automates semantic, structured commit message generation using AI. Boost productivity and maintain a crystal-clear repository history effortlessly.
@@ -278,7 +277,7 @@ A: Yes, no token or diff is ever sent to any server except the AI you choose.
 
 ## 📝 License
 
-[MIT](LICENSE)  Made by [Andy Vandaric](https://github.com/andyvandaric)
+[Apache 2.0](LICENSE)  Made by [Andy Vandaric](https://github.com/andyvandaric)
 
 
 
