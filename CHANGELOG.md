@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.2.0 (2025-06-19)
+
+### Features
+- feat(scripts): migrate project license to Apache 2.0 ([`52c5858`](https://github.com/andyvandaric/avcmt-py/commit/52c5858))
+
+### Bug Fixes
+- fix!: add licensing headers to provider modules and init file ([`eca9ab3`](https://github.com/andyvandaric/avcmt-py/commit/eca9ab3))
+
+### Refactoring
+- refactor(root): update LICENSE to Apache License 2.0 and add NOTICE file ([`ba9079e`](https://github.com/andyvandaric/avcmt-py/commit/ba9079e))
+
+### Chores
+- Merge branch 'chore/test-apache-license-migration' ([`32cc7d0`](https://github.com/andyvandaric/avcmt-py/commit/32cc7d0))
+- chore(avcmt): add licensing headers to source files ([`e38174f`](https://github.com/andyvandaric/avcmt-py/commit/e38174f))
+
+
 ## v1.1.1 (2025-06-19)
 
 ### Bug Fixes
