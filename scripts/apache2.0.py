@@ -4,12 +4,12 @@ Script to migrate a project's license to Apache License 2.0.
 This script ensures full compliance with Apache 2.0 guidelines by:
 - Creating LICENSE and NOTICE files.
 - Inserting a dynamically generated license header, including the copyright line,
-  into all relevant source files.
+    into all relevant source files.
 - Correctly handling files with a shebang (#!/usr/bin/env python).
 - Skipping files that already have a license header.
 - Updating pyproject.toml with the correct license identifier.
 - Updating README.md with a single, best-practice license badge linking
-  to the local LICENSE file.
+    to the local LICENSE file.
 - Creating a timestamped backup before modifying any file.
 """
 
@@ -19,6 +19,7 @@ import re
 import shutil
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Try to import third-party libraries, provide a message on failure.
 try:
@@ -76,7 +77,7 @@ NEW_LICENSE_BADGE = f"[![License](https://img.shields.io/badge/License-Apache_2.
 
 def setup_logging(log_path: str) -> logging.Logger:
     """Sets up logging to output to both a file and the console."""
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     logger_instance = logging.getLogger("license_migration")
     logger_instance.setLevel(logging.INFO)
 
@@ -102,14 +103,15 @@ logger = setup_logging(LOG_FILE_PATH)
 
 def create_timestamped_backup(file_path: str, backup_dir: str) -> str:
     """Creates a backup of a file into a timestamped backup directory."""
-    if not os.path.exists(file_path):
+    p_file_path = Path(file_path)
+    if not p_file_path.exists():
         return ""
     try:
-        rel_path = os.path.relpath(file_path)
-        backup_path_full = os.path.join(backup_dir, rel_path)
-        os.makedirs(os.path.dirname(backup_path_full), exist_ok=True)
-        shutil.copy2(file_path, backup_path_full)
-        return backup_path_full
+        rel_path = os.path.relpath(p_file_path)
+        backup_path_full = Path(backup_dir) / rel_path
+        backup_path_full.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p_file_path, backup_path_full)
+        return str(backup_path_full)
     except Exception as e:
         logger.error(f"❌ Failed to create backup for {file_path}: {e}")
         return ""
@@ -120,16 +122,19 @@ def insert_apache_header(file_path: str, backup_dir: str, copyright_info: dict) 
     Inserts the dynamically generated Apache 2.0 license header into a file.
 
     Args:
-        file_path: Path to the file to be modified.
-        backup_dir: The backup directory to use.
-        copyright_info: A dict containing 'year' and 'copyright_holder'.
+            file_path: Path to the file to be modified.
+            backup_dir: The backup directory to use.
+            copyright_info: A dict containing 'year' and 'copyright_holder'.
 
     Returns:
-        True if the header was inserted, False if skipped.
+            True if the header was inserted, False if skipped.
     """
+    p_file_path = Path(file_path)
     try:
-        with open(file_path, encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
+        # Use read_text and splitlines for a more modern approach
+        lines = p_file_path.read_text(encoding="utf-8", errors="ignore").splitlines(
+            keepends=True
+        )
 
         if not lines:
             logger.warning(f"⏩ Skipping empty file: {file_path}")
@@ -162,8 +167,7 @@ def insert_apache_header(file_path: str, backup_dir: str, copyright_info: dict) 
             shebang + encoding_line + header_text + "\n" + docstring_or_content
         )
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        p_file_path.write_text(new_content, encoding="utf-8")
 
         logger.info(f"✅ Header inserted: {file_path} | Backup: {backup}")
         return True
@@ -177,16 +181,18 @@ def update_source_files(backup_dir: str, copyright_info: dict):
     logger.info("\n--- Updating Source Files with License Header ---")
     changed_count = 0
     total_files = 0
-    for directory in SOURCE_DIRS:
-        if not os.path.isdir(directory):
+    for directory_str in SOURCE_DIRS:
+        directory = Path(directory_str)
+        if not directory.is_dir():
             logger.warning(f"Source directory '{directory}' not found.")
             continue
         for subdir, _, files in os.walk(directory):
+            p_subdir = Path(subdir)
             for file in files:
                 if any(file.endswith(ext) for ext in TARGET_EXTENSIONS):
                     total_files += 1
-                    file_path = os.path.join(subdir, file)
-                    if insert_apache_header(file_path, backup_dir, copyright_info):
+                    file_path = p_subdir / file
+                    if insert_apache_header(str(file_path), backup_dir, copyright_info):
                         changed_count += 1
     logger.info(
         f"🔧 Total source files updated: {changed_count} of {total_files} relevant files."
@@ -224,19 +230,18 @@ def write_license_and_notice(author: str, year: int):
             "[name of copyright owner]", author
         )
 
-        with open(LICENSE_OUTPUT_PATH, "w", encoding="utf-8") as f:
-            f.write(license_content)
+        Path(LICENSE_OUTPUT_PATH).write_text(license_content, encoding="utf-8")
         logger.info(f"📄 LICENSE file successfully created for {author} ({year}).")
     except requests.RequestException as e:
         logger.error(f"❌ Failed to download LICENSE file from Apache.org: {e}")
 
-    if not os.path.exists(NOTICE_PATH):
+    p_notice_path = Path(NOTICE_PATH)
+    if not p_notice_path.exists():
         notice_content = (
             f"Copyright {year} {author}\n\n"
             "This product is licensed under the Apache License, Version 2.0."
         ) + "\n"
-        with open(NOTICE_PATH, "w", encoding="utf-8") as f:
-            f.write(notice_content)
+        p_notice_path.write_text(notice_content, encoding="utf-8")
         logger.info("📄 NOTICE file successfully created.")
     else:
         logger.info("⏩ NOTICE file already exists, no changes made.")
@@ -245,14 +250,15 @@ def write_license_and_notice(author: str, year: int):
 def update_pyproject_toml(backup_dir: str):
     """Updates the 'license' field in pyproject.toml."""
     logger.info("\n--- Updating pyproject.toml ---")
+    p_pyproject_path = Path(PYPROJECT_PATH)
     try:
-        backup = create_timestamped_backup(PYPROJECT_PATH, backup_dir)
+        backup = create_timestamped_backup(str(p_pyproject_path), backup_dir)
         if not backup:
             return
 
-        data = toml.load(PYPROJECT_PATH)
+        data = toml.load(p_pyproject_path)
         data["tool"]["poetry"]["license"] = "Apache-2.0"
-        with open(PYPROJECT_PATH, "w", encoding="utf-8") as f:
+        with p_pyproject_path.open("w", encoding="utf-8") as f:
             toml.dump(data, f)
         logger.info(
             f"📝 pyproject.toml changed to 'license = \"Apache-2.0\"' | Backup: {backup}"
@@ -264,18 +270,18 @@ def update_pyproject_toml(backup_dir: str):
 def update_readme_license_badge(backup_dir: str):
     """Replaces the old license badge with a single, correct Apache 2.0 badge."""
     logger.info("\n--- Updating README.md ---")
-    if not os.path.exists(README_PATH):
+    p_readme_path = Path(README_PATH)
+    if not p_readme_path.exists():
         logger.warning(f"File {README_PATH} not found, skipping this step.")
         return
     try:
-        with open(README_PATH, encoding="utf-8") as f:
-            content = f.read()
+        content = p_readme_path.read_text(encoding="utf-8")
 
         if f"({LICENSE_OUTPUT_PATH})" in content and "Apache_2.0" in content:
             logger.info("⏩ Correct Apache 2.0 license badge already exists. Skipping.")
             return
 
-        backup = create_timestamped_backup(README_PATH, backup_dir)
+        backup = create_timestamped_backup(str(p_readme_path), backup_dir)
         if not backup:
             return
 
@@ -297,8 +303,7 @@ def update_readme_license_badge(backup_dir: str):
             flags=re.IGNORECASE,
         )
 
-        with open(README_PATH, "w", encoding="utf-8") as f:
-            f.write(new_content)
+        p_readme_path.write_text(new_content, encoding="utf-8")
     except Exception as e:
         logger.error(f"❌ Failed to update README.md: {e}")
 
@@ -307,7 +312,7 @@ def main():
     """Main function to run all migration steps."""
     start_time = datetime.now()
     backup_timestamp = start_time.strftime("%Y%m%d_%H%M%S")
-    current_backup_dir = os.path.join(BACKUP_ROOT, backup_timestamp)
+    current_backup_dir = str(Path(BACKUP_ROOT) / backup_timestamp)
 
     logger.info("=" * 53)
     logger.info("🚀 Starting License Migration to Apache 2.0")

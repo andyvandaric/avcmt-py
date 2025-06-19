@@ -20,17 +20,17 @@
 # Status: Ready to use with the new CommitManager.
 
 import argparse
-import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from .commit import run_commit_group_all
 from .utils import get_log_file, setup_logging
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-dotenv_path = os.path.join(PROJECT_ROOT, ".env")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+dotenv_path = PROJECT_ROOT / ".env"
 
-if os.path.exists(dotenv_path):
+if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
 # --- API KEY CHECK BLOCK REMOVED FROM HERE ---

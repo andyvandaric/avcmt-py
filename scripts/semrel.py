@@ -4,12 +4,12 @@
 # Status: Correct and ready to use.
 
 import argparse
-import os
 import sys
+from pathlib import Path
 
 # Add the project path to sys.path to ensure avcmt can be imported
 # This makes the script more reliable when run from anywhere.
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 try:
     from avcmt.release import ReleaseFailedError, ReleaseManager

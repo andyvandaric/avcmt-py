@@ -15,6 +15,7 @@
 # File: avcmt/ai.py
 import os
 from importlib import import_module
+from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -53,7 +54,7 @@ def generate_with_ai(
 
 
 def render_prompt(group_name, diff_text):
-    template_dir = os.path.join(os.path.dirname(__file__), "prompt_templates")
+    template_dir = Path(__file__).parent / "prompt_templates"
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("commit_message.j2")
     return template.render(group_name=group_name, diff_text=diff_text)
