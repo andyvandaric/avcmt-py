@@ -87,21 +87,21 @@ class CommitGenerator:
             raise CommitError(error_message) from e
 
     def _get_changed_files(self) -> list[str]:
-        # Original logic to get files from Git
+        # BUGFIX: The git command now includes `--deleted` and the subsequent
+        # check for file existence is removed to correctly handle `git rm` operations.
         output = self._run_git_command(
-            ["git", "ls-files", "--others", "--modified", "--exclude-standard"]
+            [
+                "git",
+                "ls-files",
+                "--deleted",
+                "--modified",
+                "--others",
+                "--exclude-standard",
+            ]
         )
-        detected_files = [line.strip() for line in output.split("\n") if line.strip()]
-
-        # Filter out files that do not physically exist
-        existing_files = []
-        for file_path_str in detected_files:
-            file_path = Path(file_path_str)
-            if file_path.is_file():  # Ensure it is a file and exists
-                existing_files.append(file_path_str)
-            else:
-                self.logger.warning(f"⏩ Skipping non-existent file: {file_path_str}")
-        return existing_files
+        # We no longer check if the file exists on disk, as deleted files won't.
+        changed_files = [line.strip() for line in output.split("\n") if line.strip()]
+        return changed_files
 
     @staticmethod
     def _group_files_by_directory(files: list[str]) -> dict[str, list[str]]:
