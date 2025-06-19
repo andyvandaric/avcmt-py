@@ -1,0 +1,101 @@
+# Copyright 2025 Andy Vandaric
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# File: avcmt/cli/release.py
+# Description: Typer sub-command for managing avcmt-py releases.
+
+
+import typer
+
+# Import absolute dari dalam package
+from avcmt.modules.release_manager import ReleaseFailedError, ReleaseManager
+from avcmt.utils import setup_logging
+
+# Inisialisasi logger untuk modul ini
+logger = setup_logging("log/release_cli.log")
+
+# Buat instance Typer untuk sub-command 'release'
+app = typer.Typer(
+    name="release",
+    help="📦 Manage project releases (Semantic Release style).",
+    no_args_is_help=True,  # Ensure that 'avcmt release' without subcommand shows help
+    rich_markup_mode="markdown",
+)
+
+
+# Logika utama rilis sekarang menjadi sub-command 'run'
+@app.command("run")
+def run_release_command(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        "-d",
+        help="Simulate the release process without changing files or git state.",
+    ),
+    push: bool = typer.Option(
+        False,
+        "--push",
+        "-p",
+        help="Push the release commit and tag to the remote repository.",
+    ),
+) -> None:
+    """
+    Execute the semantic release process.
+
+    This command orchestrates fetching latest tags, detecting version bumps
+    based on conventional commits, updating version files, generating
+    changelogs, creating git commits and tags, and optionally pushing
+    changes to a remote repository and publishing to PyPI.
+    """
+    logger.info("Initiating release process via CLI (run subcommand)...")
+    try:
+        # 1. Create an instance of the manager, it will automatically load the configuration.
+        releaser = ReleaseManager()
+
+        # 2. Run the release process with arguments from the CLI.
+        new_version = releaser.run(dry_run=dry_run, push=push)
+
+        # If successful and there is a new version, print it to stdout (for CI/CD output)
+        if new_version:
+            typer.echo(f"New version released: {new_version}")
+            logger.info(f"Release process finished. New version: {new_version}")
+        else:
+            typer.echo(
+                "No new version released (e.g., no semantic commits or dry-run)."
+            )
+            logger.info("Release process finished. No new version released.")
+
+    except ReleaseFailedError as e:
+        # Handle defined errors from the release process.
+        typer.secho(f"\n❌ Release Failed: {e}", fg=typer.colors.RED, err=True)
+        logger.error(f"Release process failed: {e}", exc_info=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        # Handle other unexpected errors for debugging.
+        typer.secho(
+            f"\n❌ An unexpected error occurred during release: {e}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        logger.critical(f"Unexpected error during release: {e}", exc_info=True)
+        raise typer.Exit(code=1)
+
+
+# Jika ingin menambahkan sub-command lain di bawah 'release' di masa depan,
+# bisa ditambahkan di sini menggunakan @app.command()
+# Contoh:
+# @app.command()
+# def status():
+#     """Show current release status."""
+#     typer.echo("Checking release status...")

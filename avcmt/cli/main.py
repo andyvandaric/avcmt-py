@@ -30,6 +30,7 @@ import typer
 # --- Sub-command Imports ---
 # CHANGE: We now import the module as an 'app' to be added.
 from .commit import app as commit_app
+from .release import app as release_app  # ADDED: Import the release Typer app
 
 app = typer.Typer(
     name="avcmt",
@@ -84,8 +85,7 @@ def main_callback(
 # The decorator automatically handles converting the function's parameters
 # into CLI options like --dry-run, --push, etc.
 app.add_typer(commit_app)
-
-# We will follow this new pattern for the 'release' command in the next task.
+app.add_typer(release_app)  # ADDED: Register the release Typer app
 
 if __name__ == "__main__":
     app()
