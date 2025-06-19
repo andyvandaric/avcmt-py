@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# File: avcmt/release.py
-# Final Revision v5 - Adding pre-flight checks and enhanced changelog with commit links.
+# File: avcmt/release.py -> avcmt/modules/release_manager.py
+# Final Revision v6 - Enhanced changelog generation with better formatting and commit parsing.
 
 import os
 import re
@@ -21,7 +21,7 @@ import subprocess
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import toml
 
@@ -42,6 +42,22 @@ class ReleaseManager:
     Manages the entire semantic release process by orchestrating stateless git
     utilities and stateful versioning logic.
     """
+
+    # NEW: Define section headers with emojis and desired formatting
+    SECTION_HEADERS_WITH_EMOJIS: ClassVar[dict[str, str]] = {
+        "feat": "### 🚀 Features",
+        "fix": "### 🐛 Bug Fixes",
+        "perf": "### ⚡ Performance Improvements",
+        "refactor": "### 🛠️ Refactoring",
+        "docs": "### 📚 Documentation",
+        "style": "### 💅 Styles",
+        "test": "### 🧪 Tests",
+        "build": "### 🏗️ Build System",
+        "ci": "### 🔄 Continuous Integration",
+        "chore": "### 🧹 Chores",
+        # Default for unrecognized types or 'other'
+        "other": "### 📦 Others",
+    }
 
     def __init__(self, config_path: str = "pyproject.toml"):
         """Initializes the manager by loading configuration."""
@@ -194,53 +210,117 @@ class ReleaseManager:
                 f"Failed to update version file {path}: {e}"
             ) from e
 
-    def _generate_formatted_changelog_section(self) -> str:
+    @staticmethod
+    def _parse_and_group_commits_for_changelog(
+        commits: list[dict[str, str]],
+    ) -> dict[str, list[dict[str, Any]]]:
         """
-        Parses conventional commits and generates a formatted changelog section with commit links.
+        Parses conventional commits and groups them by type,
+        extracting type, scope, and description for better formatting.
         """
         grouped_commits = defaultdict(list)
-        commit_pattern = re.compile(r"^(\w+)(?:\((.+)\))?!?: (.*)")
-        repo_url = self.config.get("repo_url")
+        # Pattern to capture type, optional scope, breaking change, and description
+        commit_pattern = re.compile(
+            r"^(feat|fix|perf|refactor|docs|style|test|build|ci|chore)(?:\((.+?)\))?(!?): (.*)"
+        )
 
-        for commit in self.commits:
+        for commit in commits:
             subject = commit["subject"]
             match = commit_pattern.match(subject)
             if match:
                 commit_type = match.group(1)
-                grouped_commits[commit_type].append(commit)
-            else:
-                grouped_commits["chore"].append(commit)
+                scope = match.group(2)
+                breaking = match.group(3) == "!"
+                description = match.group(4)
 
-        section_headers = {
-            "feat": "### Features",
-            "fix": "### Bug Fixes",
-            "perf": "### Performance Improvements",
-            "refactor": "### Refactoring",
-            "docs": "### Documentation",
-            "style": "### Styles",
-            "test": "### Tests",
-            "build": "### Build System",
-            "ci": "### Continuous Integration",
-            "chore": "### Chores",
-        }
+                parsed_commit_data = {
+                    "raw_subject": subject,
+                    "type": commit_type,
+                    "scope": scope,
+                    "breaking": breaking,
+                    "description": description,
+                }
+                grouped_commits[commit_type].append(
+                    {"hash": commit["hash"], "data": parsed_commit_data}
+                )
+            else:
+                # Fallback for non-conventional commits
+                grouped_commits["other"].append(
+                    {
+                        "hash": commit["hash"],
+                        "data": {
+                            "raw_subject": subject,
+                            "type": "other",
+                            "scope": None,
+                            "breaking": False,
+                            "description": subject,
+                        },
+                    }
+                )
+        return grouped_commits
+
+    def _generate_formatted_changelog_section(self) -> str:
+        """
+        Parses conventional commits and generates a formatted changelog section with commit links.
+        This version applies improved formatting.
+        """
+        grouped_commits = self._parse_and_group_commits_for_changelog(self.commits)
+        repo_url = self.config.get("repo_url")
 
         new_section_parts = []
         dt = datetime.now().strftime("%Y-%m-%d")
         new_section_parts.append(f"## {self.new_version} ({dt})\n")
 
-        for type_key, header in section_headers.items():
+        # Iterate through ordered types to maintain consistent section order
+        ordered_types = [
+            "feat",
+            "fix",
+            "perf",
+            "refactor",
+            "docs",
+            "style",
+            "test",
+            "build",
+            "ci",
+            "chore",
+            "other",
+        ]
+
+        for type_key in ordered_types:
             if commits_list := grouped_commits.get(type_key):
+                header = self.SECTION_HEADERS_WITH_EMOJIS.get(
+                    type_key, f"### {type_key.capitalize()}"
+                )
                 new_section_parts.append(header)
                 for c in commits_list:
+                    commit_data = c["data"]
                     commit_link = ""
                     if repo_url:
                         commit_link = (
-                            f" ([`{c['hash']}`]({repo_url}/commit/{c['hash']}))"
+                            f" ([`{c['hash'][:7]}`]({repo_url}/commit/{c['hash']}))"
                         )
-                    new_section_parts.append(f"- {c['subject']}{commit_link}")
-                new_section_parts.append("")
 
-        return "\n".join(new_section_parts)
+                    # Format subject: **type(scope):** description (link)
+                    formatted_subject_prefix = f"**{commit_data['type']}"
+                    if commit_data["scope"]:
+                        formatted_subject_prefix += f"({commit_data['scope']})"
+                    formatted_subject_prefix += ":**"
+
+                    breaking_change_indicator = (
+                        " **(BREAKING CHANGE)**" if commit_data["breaking"] else ""
+                    )
+
+                    new_section_parts.append(
+                        f"- {formatted_subject_prefix}{breaking_change_indicator} {commit_data['description']}{commit_link}"
+                    )
+                new_section_parts.append(
+                    ""
+                )  # Add a blank line after each section for better readability
+
+        return (
+            "\n".join(part for part in new_section_parts if part is not None).strip()
+            + "\n"
+        )  # Ensure no multiple newlines at end
 
     def _update_changelog(self):
         """
@@ -249,7 +329,7 @@ class ReleaseManager:
         """
         path = Path(self.config["changelog_file"])
         new_section = self._generate_formatted_changelog_section()
-        marker = "<!-- version list -->"
+        marker = ""
 
         try:
             content = ""
@@ -262,7 +342,10 @@ class ReleaseManager:
 
             if marker in content:
                 parts = content.split(marker, 1)
-                final_content = f"{parts[0]}{marker}\n\n{new_section}{parts[1]}"
+                # Insert new_section after the marker, ensure consistent spacing
+                final_content = (
+                    f"{parts[0]}{marker}\n\n{new_section}{parts[1].lstrip()}"
+                )
             else:
                 logger.warning(
                     f"Marker '{marker}' not found in {path}. Prepending content."
