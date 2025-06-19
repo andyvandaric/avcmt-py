@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## v1.5.0 (2025-06-19)
+
+### Features
+- feat(avcmt/modules): improve changed files detection to include deleted files and handle removals correctly ([`90bd4c5`](https://github.com/andyvandaric/avcmt-py/commit/90bd4c5))
+
+### Chores
+- Merge branch 'main' of https://github.com/andyvandaric/avcmt-py ([`e2c742d`](https://github.com/andyvandaric/avcmt-py/commit/e2c742d))
+- chore: unused script ([`a5de3bf`](https://github.com/andyvandaric/avcmt-py/commit/a5de3bf))
+- Merge branch 'main' of https://github.com/andyvandaric/avcmt-py ([`c58c560`](https://github.com/andyvandaric/avcmt-py/commit/c58c560))
+- chore: unused script ([`7931c7d`](https://github.com/andyvandaric/avcmt-py/commit/7931c7d))
+
+
 ## v1.4.1 (2025-06-19)
 
 ### Bug Fixes
