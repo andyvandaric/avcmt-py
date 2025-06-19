@@ -2,6 +2,12 @@
 
 <!-- version list -->
 
+## v1.1.1 (2025-06-19)
+
+### Bug Fixes
+- fix(docs): update project description and shields in README.md ([`14c211d`](https://github.com/andyvandaric/avcmt-py/commit/14c211d))
+
+
 ## v1.1.0 (2025-06-18)
 
 ### Features
