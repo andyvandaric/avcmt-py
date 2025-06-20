@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # File: avcmt/modules/commit_generator.py
-# FINAL REVISION: Refactored to pass linter complexity checks (C901, PLR0912).
+# FINAL REVISION: Smartly handles push even with no new file changes.
 
 import logging
 import subprocess
@@ -61,8 +61,8 @@ class CommitGenerator:
         self.dry_run_file = Path("log") / "commit_messages_dry_run.md"
         self.commit_template_env = get_jinja_env("commit")
 
-    # --- Helper methods unchanged ---
-    def _run_git_command(self, command: list[str]) -> str:
+    # ... (Metode helper lain dari _run_git_command hingga _get_commit_message tetap sama) ...
+    def _run_git_command(self, command: list[str], ignore_errors: bool = False) -> str:
         try:
             result = subprocess.run(
                 command,
@@ -70,7 +70,7 @@ class CommitGenerator:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                check=True,
+                check=not ignore_errors,
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
@@ -156,43 +156,72 @@ class CommitGenerator:
         )
         return clean_ai_response(raw_message)
 
-    # --- REFACTOR: run() method is now a high-level orchestrator ---
+    # --- FUNGSI HELPER BARU ---
+    def _is_local_ahead(self) -> bool:
+        """Checks if the local branch has commits that the remote branch does not."""
+        try:
+            # Pastikan remote-tracking branch ada
+            self._run_git_command(["git", "fetch", "origin"])
+            # Hitung jumlah commit yang ada di lokal tapi tidak di remote
+            output = self._run_git_command(
+                ["git", "rev-list", "--count", "@{u}..HEAD"], ignore_errors=True
+            )
+            if output and int(output) > 0:
+                self.logger.info(
+                    f"Local branch is ahead of remote by {output} commit(s)."
+                )
+                return True
+        except CommitError as e:
+            # Ini bisa terjadi jika branch belum pernah di-push (tidak ada upstream)
+            self.logger.warning(
+                f"Could not check remote status (branch may be new): {e}"
+            )
+            # Anggap saja 'ahead' jika ada commit lokal tapi upstream belum ada
+            return bool(
+                self._run_git_command(["git", "rev-parse", "HEAD"], ignore_errors=True)
+            )
+        return False
+
     def run(self):
-        """Main execution method, orchestrating the commit process."""
+        """Main execution method with improved state checking."""
         initial_files = self._get_changed_files()
-        if not initial_files:
-            self.logger.info("No changed files detected. Exiting.")
+        local_is_ahead = self._is_local_ahead()
+
+        # --- LOGIKA BARU: Keluar hanya jika tidak ada perubahan DAN tidak ada commit untuk di-push ---
+        if not initial_files and not local_is_ahead:
+            self.logger.info(
+                "No changed files and local branch is up-to-date. Nothing to do."
+            )
             return
 
-        grouped_files = self._group_files_by_directory(initial_files)
-        cached_messages = self._prepare_cache()
-
-        # --- BUG FIX: LINTER ERROR RUF059 ---
-        # Replace 'successful_groups' with '_' as it's never used.
-        _, failed_groups = self._process_groups(grouped_files, cached_messages)
+        # Proses commit hanya jika ada perubahan file
+        if initial_files:
+            grouped_files = self._group_files_by_directory(initial_files)
+            cached_messages = self._prepare_cache()
+            _, failed_groups = self._process_groups(grouped_files, cached_messages)
+        else:
+            # Jika tidak ada file baru, tapi lokal lebih maju, lewati proses commit
+            self.logger.info(
+                "No new file changes to commit, but local branch is ahead. Proceeding to push."
+            )
+            failed_groups = []
 
         self._finalize_run(failed_groups)
 
-    # --- REFACTOR: New helper for cache preparation ---
+    # ... (Metode _prepare_cache, _process_groups, _process_single_group tidak berubah dari patch sebelumnya) ...
     def _prepare_cache(self) -> dict[str, str]:
-        """Prepares the cache for a run, either by clearing or loading it."""
         if self.dry_run:
             self._write_dry_run_header()
             return {}
-
         if not self.force_rebuild and is_recent_dry_run(self.dry_run_file):
             self.logger.info(f"Recent cache found. Loading from {self.dry_run_file}")
             return extract_commit_messages_from_md(self.dry_run_file)
-
         return {}
 
-    # --- REFACTOR: New helper for processing all groups ---
     def _process_groups(
         self, grouped_files: dict, cached_messages: dict
     ) -> tuple[list, list]:
-        """Iterates through file groups and processes each one for committing."""
         successful_groups, failed_groups = [], []
-
         for group_name, files in grouped_files.items():
             was_successful = self._process_single_group(
                 group_name, files, cached_messages
@@ -201,40 +230,29 @@ class CommitGenerator:
                 successful_groups.append(group_name)
             else:
                 failed_groups.append(group_name)
-
         return successful_groups, failed_groups
 
-    # --- REFACTOR: New helper for processing a single group ---
     def _process_single_group(
         self, group_name: str, files: list, cached_messages: dict
     ) -> bool:
-        """Stages, generates a message for, and commits a single group of files."""
         self._stage_changes(files)
-
         diff = self._get_diff_for_files(files)
         if not diff.strip():
             self.logger.info(f"[SKIP] No diff for group {group_name}. Unstaging.")
             self._run_git_command(["git", "reset", "HEAD", "--", *files])
-            return True  # Consider no-diff as a "success" for the run
-
+            return True
         commit_message = self._get_commit_message(group_name, diff, cached_messages)
-
         if not commit_message:
             self.logger.error(f"Skipping group '{group_name}' due to empty message.")
-            # Leave files staged for manual commit by the user
             return False
-
         if self.dry_run:
             self._write_dry_run_entry(group_name, commit_message)
             self._run_git_command(["git", "reset", "HEAD", "--", *files])
         else:
             self._commit_changes(commit_message)
-
         return True
 
-    # --- REFACTOR: New helper for finalization (push and final logging) ---
     def _finalize_run(self, failed_groups: list):
-        """Finalizes the run by pushing changes and logging completion status."""
         if self.push and not self.dry_run:
             if not failed_groups:
                 self._push_changes()
