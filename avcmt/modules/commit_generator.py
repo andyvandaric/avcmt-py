@@ -13,8 +13,9 @@
 # limitations under the License.
 
 # File: avcmt/modules/commit_generator.py
-# FINAL REVISION: Fixes staging logic to handle multi-group commits correctly.
+# FINAL REVISION: Refactored to pass linter complexity checks (C901, PLR0912).
 
+import logging
 import subprocess
 from collections import defaultdict
 from datetime import datetime
@@ -33,8 +34,6 @@ from avcmt.utils import (
 
 class CommitError(Exception):
     """Custom exception for failures during the commit generation process."""
-
-    pass
 
 
 class CommitGenerator:
@@ -62,6 +61,7 @@ class CommitGenerator:
         self.dry_run_file = Path("log") / "commit_messages_dry_run.md"
         self.commit_template_env = get_jinja_env("commit")
 
+    # --- Helper methods unchanged ---
     def _run_git_command(self, command: list[str]) -> str:
         try:
             result = subprocess.run(
@@ -137,64 +137,14 @@ class CommitGenerator:
         self._run_git_command(["git", "push"])
         self.logger.info("✔️ All changes pushed successfully.")
 
-    def run(self):
-        """Main execution method."""
-        initial_files = self._get_changed_files()
-        if not initial_files:
-            self.logger.info("No changed files detected. Exiting.")
-            return
-
-        grouped_files = self._group_files_by_directory(initial_files)
-
-        cached_messages = {}
-        if self.dry_run:
-            self._write_dry_run_header()
-        elif not self.force_rebuild and is_recent_dry_run(self.dry_run_file):
-            self.logger.info(f"Recent cache found. Loading from {self.dry_run_file}")
-            cached_messages = extract_commit_messages_from_md(self.dry_run_file)
-
-        # --- BUG FIX: Staging is now done inside the loop, per group ---
-        for group_name, files in grouped_files.items():
-            self._stage_changes(files)
-
-            # Check for diff *after* staging the group
-            diff = self._get_diff_for_files(files)
-            if not diff.strip():
-                self.logger.info(
-                    f"[SKIP] No diff detected for group {group_name}. Unstaging files."
-                )
-                self._run_git_command(["git", "reset", "HEAD", "--", *files])
-                continue
-
-            commit_message = self._get_commit_message(group_name, diff, cached_messages)
-            if not commit_message:
-                self.logger.error(f"Skipping group {group_name} due to empty message.")
-                self._run_git_command(["git", "reset", "HEAD", "--", *files])
-                continue
-
-            if self.dry_run:
-                self._write_dry_run_entry(group_name, commit_message)
-                # Unstage after processing for dry run
-                self._run_git_command(["git", "reset", "HEAD", "--", *files])
-            else:
-                self._commit_changes(commit_message)
-
-        if self.push and not self.dry_run:
-            self._push_changes()
-
-        self.logger.info("✅ Commit process completed.")
-
     def _get_commit_message(
         self, group_name: str, diff: str, cached_messages: dict
     ) -> str:
-        """Gets a commit message either from cache or by generating it via AI."""
         if not self.force_rebuild and group_name in cached_messages:
             self.logger.info(f"[CACHED] Using cached message for {group_name}.")
             return cached_messages[group_name]
-
         if self.force_rebuild and group_name in cached_messages:
             self.logger.info(f"[FORCED] Ignoring cache for {group_name}.")
-
         template = self.commit_template_env.get_template("commit_message.j2")
         prompt = template.render(group_name=group_name, diff_text=diff)
         raw_message = generate_with_ai(
@@ -206,14 +156,115 @@ class CommitGenerator:
         )
         return clean_ai_response(raw_message)
 
+    # --- REFACTOR: run() method is now a high-level orchestrator ---
+    def run(self):
+        """Main execution method, orchestrating the commit process."""
+        initial_files = self._get_changed_files()
+        if not initial_files:
+            self.logger.info("No changed files detected. Exiting.")
+            return
+
+        grouped_files = self._group_files_by_directory(initial_files)
+        cached_messages = self._prepare_cache()
+
+        # --- BUG FIX: LINTER ERROR RUF059 ---
+        # Replace 'successful_groups' with '_' as it's never used.
+        _, failed_groups = self._process_groups(grouped_files, cached_messages)
+
+        self._finalize_run(failed_groups)
+
+    # --- REFACTOR: New helper for cache preparation ---
+    def _prepare_cache(self) -> dict[str, str]:
+        """Prepares the cache for a run, either by clearing or loading it."""
+        if self.dry_run:
+            self._write_dry_run_header()
+            return {}
+
+        if not self.force_rebuild and is_recent_dry_run(self.dry_run_file):
+            self.logger.info(f"Recent cache found. Loading from {self.dry_run_file}")
+            return extract_commit_messages_from_md(self.dry_run_file)
+
+        return {}
+
+    # --- REFACTOR: New helper for processing all groups ---
+    def _process_groups(
+        self, grouped_files: dict, cached_messages: dict
+    ) -> tuple[list, list]:
+        """Iterates through file groups and processes each one for committing."""
+        successful_groups, failed_groups = [], []
+
+        for group_name, files in grouped_files.items():
+            was_successful = self._process_single_group(
+                group_name, files, cached_messages
+            )
+            if was_successful:
+                successful_groups.append(group_name)
+            else:
+                failed_groups.append(group_name)
+
+        return successful_groups, failed_groups
+
+    # --- REFACTOR: New helper for processing a single group ---
+    def _process_single_group(
+        self, group_name: str, files: list, cached_messages: dict
+    ) -> bool:
+        """Stages, generates a message for, and commits a single group of files."""
+        self._stage_changes(files)
+
+        diff = self._get_diff_for_files(files)
+        if not diff.strip():
+            self.logger.info(f"[SKIP] No diff for group {group_name}. Unstaging.")
+            self._run_git_command(["git", "reset", "HEAD", "--", *files])
+            return True  # Consider no-diff as a "success" for the run
+
+        commit_message = self._get_commit_message(group_name, diff, cached_messages)
+
+        if not commit_message:
+            self.logger.error(f"Skipping group '{group_name}' due to empty message.")
+            # Leave files staged for manual commit by the user
+            return False
+
+        if self.dry_run:
+            self._write_dry_run_entry(group_name, commit_message)
+            self._run_git_command(["git", "reset", "HEAD", "--", *files])
+        else:
+            self._commit_changes(commit_message)
+
+        return True
+
+    # --- REFACTOR: New helper for finalization (push and final logging) ---
+    def _finalize_run(self, failed_groups: list):
+        """Finalizes the run by pushing changes and logging completion status."""
+        if self.push and not self.dry_run:
+            if not failed_groups:
+                self._push_changes()
+            else:
+                self.logger.error(
+                    "❌ Push aborted because one or more commit groups failed."
+                )
+
+        if self.dry_run:
+            self.logger.info(
+                f"✅ DRY RUN COMPLETED. Review suggestions in: {self.dry_run_file.resolve()}"
+            )
+        else:
+            self.logger.info("✅ Commit process completed.")
+            if failed_groups:
+                self.logger.warning(
+                    f"The following groups were skipped: {', '.join(failed_groups)}"
+                )
+                self.logger.warning(
+                    "Please review the changes, commit them manually, and then push."
+                )
+
 
 def run_commit_group_all(**kwargs):
     """Initializes and runs the CommitGenerator."""
+    logger = logging.getLogger("avcmt")
     try:
         generator = CommitGenerator(**kwargs)
         generator.run()
     except (CommitError, Exception) as e:
-        logger = setup_logging("log/commit.log")
         logger.error(f"FATAL: The commit process failed: {e}", exc_info=True)
 
 
