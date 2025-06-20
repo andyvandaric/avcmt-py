@@ -13,9 +13,7 @@
 # limitations under the License.
 
 # File: avcmt/modules/commit_generator.py
-# Description: Business logic for generating AI-powered commit messages.
-#              Refactored from the original commit.py as part of Task 1.1.
-# Revision: Fix for handling deleted files in dry-run with 'git diff --staged'.
+# FINAL REVISION: Fixes staging logic to handle multi-group commits correctly.
 
 import subprocess
 from collections import defaultdict
@@ -39,14 +37,8 @@ class CommitError(Exception):
     pass
 
 
-# CLASS RENAME: CommitManager -> CommitGenerator
-# The class is renamed to better reflect its role as a "generator"
-# in the new modular architecture, as per the roadmap.
 class CommitGenerator:
-    """
-    Manages the AI-powered commit generation process, from staging changes
-    to creating grouped commits.
-    """
+    """Manages the AI-powered commit generation process."""
 
     def __init__(
         self,
@@ -68,12 +60,9 @@ class CommitGenerator:
         self.logger = logger or setup_logging("log/commit.log")
         self.kwargs = kwargs
         self.dry_run_file = Path("log") / "commit_messages_dry_run.md"
-        self.commit_template_env = get_jinja_env(
-            "commit"
-        )  # Initialize Jinja2 environment for commit templates
+        self.commit_template_env = get_jinja_env("commit")
 
     def _run_git_command(self, command: list[str]) -> str:
-        """Helper to run a git command and handle potential errors."""
         try:
             result = subprocess.run(
                 command,
@@ -92,8 +81,6 @@ class CommitGenerator:
             raise CommitError(error_message) from e
 
     def _get_changed_files(self) -> list[str]:
-        # BUGFIX: The git command now includes `--deleted` and the subsequent
-        # check for file existence is removed to correctly handle `git rm` operations.
         output = self._run_git_command(
             [
                 "git",
@@ -104,9 +91,7 @@ class CommitGenerator:
                 "--exclude-standard",
             ]
         )
-        # We no longer check if the file exists on disk, as deleted files won't.
-        changed_files = [line.strip() for line in output.split("\n") if line.strip()]
-        return changed_files
+        return [line.strip() for line in output.split("\n") if line.strip()]
 
     @staticmethod
     def _group_files_by_directory(files: list[str]) -> dict[str, list[str]]:
@@ -119,8 +104,6 @@ class CommitGenerator:
         return grouped
 
     def _get_diff_for_files(self, files: list[str]) -> str:
-        # BUGFIX: Add '--' to correctly handle diffing of deleted files.
-        # This ensures git interprets subsequent arguments as paths, not revisions.
         return self._run_git_command(
             ["git", "--no-pager", "diff", "--staged", "--", *files]
         )
@@ -142,7 +125,7 @@ class CommitGenerator:
     def _stage_changes(self, files: list[str]):
         if not files:
             return
-        self.logger.info(f"Staging files: {files}")
+        self.logger.info(f"Staging files for group: {files}")
         self._run_git_command(["git", "add", *files])
 
     def _commit_changes(self, message: str):
@@ -150,161 +133,83 @@ class CommitGenerator:
         self._run_git_command(["git", "commit", "-m", message])
 
     def _push_changes(self):
-        """Pushes all commits to the active remote branch and provides next steps."""
         self.logger.info("Pushing all commits to the active remote branch...")
         self._run_git_command(["git", "push"])
         self.logger.info("✔️ All changes pushed successfully.")
 
-        # --- Suggested Section (With Minor Improvements) ---
-        self.logger.info("\n")
-        self.logger.info("💡 NEXT STEP: Synchronize with CI/CD Results")
-        self.logger.info(
-            "Your push has likely triggered a GitHub Action (e.g., release)."
-        )
-        self.logger.info(
-            "After the action completes, run the following command to get the updates:"
-        )
-        self.logger.info("    git pull origin main")
-
-    def _prepare_for_run(self) -> list[str] | None:
-        self.logger.info(
-            f"Starting CommitGenerator: dry_run={self.dry_run}, push={self.push}, force_rebuild={self.force_rebuild}"
-        )
+    def run(self):
+        """Main execution method."""
         initial_files = self._get_changed_files()
         if not initial_files:
             self.logger.info("No changed files detected. Exiting.")
-            return None
+            return
 
-        if not self.dry_run:
-            self.logger.info("Staging all detected changes for a consistent state...")
-            self._stage_changes(initial_files)
+        grouped_files = self._group_files_by_directory(initial_files)
 
-        files_to_commit = self._run_git_command(
-            ["git", "diff", "--name-only", "--cached"]
-        ).split("\n")
-        files_to_commit = [f for f in files_to_commit if f]
-
-        if not files_to_commit and not self.dry_run:
-            self.logger.warning("No files were staged for commit.")
-            return None
-
-        return files_to_commit or initial_files
-
-    def _process_single_group(
-        self, group_name: str, files: list[str], cached_messages: dict
-    ):
-        self.logger.info(f"--- Processing group: {group_name} ---")
-
+        cached_messages = {}
         if self.dry_run:
-            # Stage files for dry-run diff
+            self._write_dry_run_header()
+        elif not self.force_rebuild and is_recent_dry_run(self.dry_run_file):
+            self.logger.info(f"Recent cache found. Loading from {self.dry_run_file}")
+            cached_messages = extract_commit_messages_from_md(self.dry_run_file)
+
+        # --- BUG FIX: Staging is now done inside the loop, per group ---
+        for group_name, files in grouped_files.items():
             self._stage_changes(files)
 
-        diff = self._get_diff_for_files(files)
-
-        if not diff.strip():
-            self.logger.info(f"[SKIP] No diff detected for {group_name}.")
-            # If dry_run, unstage the files that were temporarily staged for diff
-            if self.dry_run:
-                self._run_git_command(["git", "reset", "HEAD", "--", *files])
-            return
-
-        if not self.force_rebuild and group_name in cached_messages:
-            commit_message = cached_messages[group_name]
-            self.logger.info(f"[CACHED] Using cached message for {group_name}.")
-        else:
-            if self.force_rebuild and group_name in cached_messages:
+            # Check for diff *after* staging the group
+            diff = self._get_diff_for_files(files)
+            if not diff.strip():
                 self.logger.info(
-                    f"[FORCED] Ignoring cache and rebuilding message for {group_name}."
+                    f"[SKIP] No diff detected for group {group_name}. Unstaging files."
                 )
-
-            # Render prompt directly using the new Jinja2 environment
-            template = self.commit_template_env.get_template("commit_message.j2")
-            prompt = template.render(group_name=group_name, diff_text=diff)
-
-            raw_message = generate_with_ai(
-                prompt,
-                provider=self.provider,
-                model=self.model,
-                debug=self.debug,
-                **self.kwargs,
-            )
-            commit_message = clean_ai_response(raw_message)
-
-        self.logger.info(f"Suggested message for {group_name}:\n{commit_message}")
-
-        if not commit_message.strip():
-            self.logger.error(
-                f"Generated commit message for group '{group_name}' is empty after cleaning. Skipping commit."
-            )
-            if not self.dry_run:
                 self._run_git_command(["git", "reset", "HEAD", "--", *files])
-            return
+                continue
 
-        if self.dry_run:
-            self._write_dry_run_entry(group_name, commit_message)
-            # Crucially, unstage files after dry-run processing
-            self._run_git_command(["git", "reset", "HEAD", "--", *files])
-        else:
-            self._commit_changes(commit_message)
+            commit_message = self._get_commit_message(group_name, diff, cached_messages)
+            if not commit_message:
+                self.logger.error(f"Skipping group {group_name} due to empty message.")
+                self._run_git_command(["git", "reset", "HEAD", "--", *files])
+                continue
 
-    def run(self):
-        files_to_commit = self._prepare_for_run()
-        if not files_to_commit:
-            return
-
-        if self.force_rebuild:
-            self.logger.info("--force-rebuild is active, ignoring cache.")
-            cached_messages = {}
-        else:
-            use_cache = not self.dry_run and is_recent_dry_run(self.dry_run_file)
-            cached_messages = (
-                extract_commit_messages_from_md(self.dry_run_file) if use_cache else {}
-            )
-
-        grouped_files = self._group_files_by_directory(files_to_commit)
-
-        # In dry-run, we stage/unstage per group. So no global unstage needed here.
-        # In live run, we explicitly stage all at once for consistency before looping.
-        if not self.dry_run:
-            self._stage_changes(
-                files_to_commit
-            )  # Ensure all are staged for the live run
-
-        for group_name, files in grouped_files.items():
-            self._process_single_group(group_name, files, cached_messages)
-            # The unstage for dry_run is now handled inside _process_single_group
+            if self.dry_run:
+                self._write_dry_run_entry(group_name, commit_message)
+                # Unstage after processing for dry run
+                self._run_git_command(["git", "reset", "HEAD", "--", *files])
+            else:
+                self._commit_changes(commit_message)
 
         if self.push and not self.dry_run:
             self._push_changes()
 
-        # If it was a dry run, and we staged files globally in _prepare_for_run (which doesn't happen for dry_run)
-        # or if we staged files in _process_single_group, we need to ensure everything is unstaged at the end.
-        # The logic within _process_single_group handles unstaging per group in dry_run, so this global one is mostly for safety.
-        # However, the problem occurs when _get_diff_for_files is called with files that are NOT staged.
-        # The fix for '--' should handle the "ambiguous argument" error even if they are not staged.
-        # But for dry-run, we explicitly stage per group. So the existing `_run_git_command(["git", "reset", "HEAD", "--", *files])` in _process_single_group is correct.
+        self.logger.info("✅ Commit process completed.")
 
-        if self.dry_run:
-            self.logger.info(
-                f"DRY RUN COMPLETED. Review suggestions in: {self.dry_run_file}"
-            )
-            # Ensure everything is unstaged globally after dry-run if _prepare_for_run staged it (it doesn't for dry-run)
-            # Or if there were any files staged for dry-run that didn't go through _process_single_group for some reason.
-            # However, the individual group unstaging in _process_single_group is the primary mechanism.
-            # Let's add a global unstage at the end of dry-run mode in `run` for robustness.
-            # No, this is incorrect. `files_to_commit` might include deleted files that are no longer present.
-            # The current logic of staging/unstaging per group in dry-run for the diff is the most correct.
-            # The root cause was the missing `--`.
-            pass  # No global unstage needed here for dry-run due to per-group staging/unstaging
+    def _get_commit_message(
+        self, group_name: str, diff: str, cached_messages: dict
+    ) -> str:
+        """Gets a commit message either from cache or by generating it via AI."""
+        if not self.force_rebuild and group_name in cached_messages:
+            self.logger.info(f"[CACHED] Using cached message for {group_name}.")
+            return cached_messages[group_name]
 
-        else:  # Live run path
-            self.logger.info("✅ Commit process completed.")
+        if self.force_rebuild and group_name in cached_messages:
+            self.logger.info(f"[FORCED] Ignoring cache for {group_name}.")
+
+        template = self.commit_template_env.get_template("commit_message.j2")
+        prompt = template.render(group_name=group_name, diff_text=diff)
+        raw_message = generate_with_ai(
+            prompt,
+            provider=self.provider,
+            model=self.model,
+            debug=self.debug,
+            **self.kwargs,
+        )
+        return clean_ai_response(raw_message)
 
 
 def run_commit_group_all(**kwargs):
     """Initializes and runs the CommitGenerator."""
     try:
-        # INSTANTIATION UPDATE: Use the new class name
         generator = CommitGenerator(**kwargs)
         generator.run()
     except (CommitError, Exception) as e:
