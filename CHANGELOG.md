@@ -2,6 +2,21 @@
 
 <!-- avcmt-release-marker -->
 
+## v1.6.0 (2025-06-20)
+
+### 🚀 Features
+- **feat(avcmt modules):** enhance commit handling with remote sync awareness and smarter state checks ([`9a88061`](https://github.com/andyvandaric/avcmt-py/commit/9a88061))
+- **feat(avcmt):** improve logging setup with handler clearing and detailed formatter ([`e7d4dd2`](https://github.com/andyvandaric/avcmt-py/commit/e7d4dd2))
+
+### 🐛 Bug Fixes
+- **fix(commit):** fix staging logic for multi-group commits ([`351c65b`](https://github.com/andyvandaric/avcmt-py/commit/351c65b))
+
+### 🧹 Chores
+- **chore(avcmt/modules):** refactor commit generation process for better readability and robustness ([`4aede0d`](https://github.com/andyvandaric/avcmt-py/commit/4aede0d))
+- **chore(avcmt/cli):** add comment line to commit.py file ([`ad804ba`](https://github.com/andyvandaric/avcmt-py/commit/ad804ba))
+
+### 📦 Others
+- **other:** Merge pull request #6 from andyvandaric/fix/commit-group-staging ([`f8ba6d6`](https://github.com/andyvandaric/avcmt-py/commit/f8ba6d6))
 ## v1.5.1 (2025-06-19)
 
 ### 🐛 Bug Fixes
