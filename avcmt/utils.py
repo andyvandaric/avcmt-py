@@ -104,21 +104,44 @@ def extract_commit_messages_from_md(filepath: Path | str) -> dict[str, str]:
 
 
 def setup_logging(log_file: Path | str = "commit_group_all.log"):
-    logger = logging.getLogger(__name__)
-    if not logger.hasHandlers():
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+    """
+    Sets up a robust logger for the application.
 
-        logger.setLevel(logging.INFO)
-        formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
+    This function configures a root logger for the 'avcmt' application.
+    It clears any existing handlers to prevent duplicate logging and sets up
+    a new file handler (in overwrite mode) and a stream handler.
 
-        fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+    Args:
+        log_file (Path | str): The path to the log file.
 
-        sh = logging.StreamHandler()
-        sh.setFormatter(formatter)
-        logger.addHandler(sh)
+    Returns:
+        logging.Logger: The configured logger instance.
+    """
+    # Menggunakan logger dengan nama 'avcmt' sebagai root untuk seluruh aplikasi
+    logger = logging.getLogger("avcmt")
+    logger.setLevel(logging.INFO)
+
+    # BUG FIX: Hapus handler yang ada untuk memastikan log selalu baru
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
+    # Handler untuk menulis ke file (selalu menimpa dengan mode 'w')
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    # Handler untuk menampilkan di konsol
+    sh = logging.StreamHandler()
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+
     return logger
 
 
