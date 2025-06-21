@@ -1,0 +1,35 @@
+# >> avcmt/prompt_templates/docs/docstring.j2
+# Copyright 2025 Andy Vandaric
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Jinja2 Template: avcmt/prompt_templates/docs/docstring.j2
+
+You are an expert Python developer tasked with writing documentation.
+Based on the Python source code provided below, generate a complete and accurate Google-style docstring.
+
+**Instructions:**
+1.  **Analyze the code:** Understand its purpose, arguments, and what it returns.
+2.  **Format:** Use Google Python Style Guide for docstrings.
+3.  **Content:**
+    -   Start with a concise one-line summary.
+    -   If necessary, add a more descriptive paragraph.
+    -   Use the `Args:` section for parameters, specifying their type and description.
+    -   Use the `Returns:` section to describe the return value and its type.
+    -   If the function can raise exceptions, use a `Raises:` section.
+4.  **Output:** Provide ONLY the raw docstring content, starting with the one-line summary and ending with the last line of the `Returns:` or `Raises:` section. DO NOT wrap it in triple quotes or markdown code blocks.
+    - DO NOT add any extra explanation or introductory text like "Here is the docstring:".
+    - **The docstring content ITSELF MUST NOT CONTAIN the triple-quote sequence characters. If you need to refer to it, use descriptive text like 'a string with triple-quotes' instead of the literal characters.**
+
+**Source Code:**
+```python
+{{ source_code }}

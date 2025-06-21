@@ -17,6 +17,19 @@ from .pollinations import PollinationsProvider
 
 
 def get_provider(name):
+    """Returns an instance of the provider class associated with the specified name or raises a NotImplementedError if the provider is not recognized.
+
+    This function maps a provider name to its corresponding provider class instance. If the provider name is not recognized, it raises an error indicating that the provider is not implemented.
+
+    Args:
+        name (str): The name of the provider to instantiate.
+
+    Returns:
+        object: An instance of the corresponding provider class.
+
+    Raises:
+        NotImplementedError: If the provider name is not recognized.
+    """
     if name.lower() == "pollinations":
         return PollinationsProvider()
     raise NotImplementedError(f"Provider '{name}' is not implemented yet.")

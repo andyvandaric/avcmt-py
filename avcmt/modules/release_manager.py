@@ -32,15 +32,35 @@ logger = setup_logging("log/semantic_release.log")
 
 
 class ReleaseFailedError(Exception):
-    """Custom exception for failures during the release process."""
+    """Custom exception indicating a failure during the release process.
+
+    This exception is used to signal that the release process has encountered an unrecoverable error or an unexpected condition that prevents it from completing successfully. It inherits from the base Exception class without adding additional functionality, serving primarily as a specific indicator of release failures.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        ReleaseFailedError: Always raised to indicate a release failure.
+    """
 
     pass
 
 
 class ReleaseManager:
-    """
-    Manages the entire semantic release process by orchestrating stateless git
-    utilities and stateful versioning logic.
+    """Manages the entire semantic release process, including version bumping, changelog updates, git tagging, and optional publishing.
+
+    This class orchestrates various static and instance methods to perform pre-release checks, determine version
+    increments based on commit messages, generate formatted changelog sections, and coordinate pushing changes
+    and publishing artifacts. It encapsulates the workflow needed for automated semantic releases.
+
+    Args:
+        config_path (str): Path to the configuration file (default is "pyproject.toml"). Specifies release settings such as version file location, branch, repository URL, and PyPI publish flag.
+
+    Raises:
+        ReleaseFailedError: If any step in the release process fails, such as configuration errors, git errors, or file I/O issues.
     """
 
     # NEW: Define section headers with emojis and desired formatting
@@ -60,7 +80,14 @@ class ReleaseManager:
     }
 
     def __init__(self, config_path: str = "pyproject.toml"):
-        """Initializes the manager by loading configuration."""
+        """Initializes the manager by loading configuration data from the specified path and validating the version path format. This constructor reads the configuration file at the given `config_path` (defaulting to "pyproject.toml"), extracts the `version_path` value, and splits it into `version_file_path` and `version_key_path` based on the colon separator. If the format of `version_path` does not match the expected "file:key.path" pattern, it raises a `ReleaseFailedError`. Additionally, it initializes attributes to track the old and new version strings and a list to store commit information.
+
+        Args:
+            config_path (str): The path to the configuration file to load (default is "pyproject.toml").
+
+        Raises:
+            ReleaseFailedError: If the `version_path` in the configuration does not conform to the expected "file:key.path" format.
+        """
         self.config = ReleaseManager._load_config(config_path)
         self.old_version: str | None = None
         self.new_version: str | None = None
@@ -81,7 +108,19 @@ class ReleaseManager:
 
     @staticmethod
     def _load_config(path: str) -> dict[str, Any]:
-        """Loads release configuration from pyproject.toml."""
+        """Loads release configuration details from the specified `pyproject.toml` file.
+
+        This function reads the given file, extracts relevant release settings from the `[tool.avcmt.release]` section, and returns them as a dictionary containing parameters such as `version_path`, `changelog_file`, `branch`, `repo_url`, and `publish_to_pypi`.
+
+        Args:
+            path (str): The file system path to the `pyproject.toml` configuration file.
+
+        Returns:
+            dict[str, Any]: A dictionary with release configuration parameters, including `'version_path'`, `'changelog_file'`, `'branch'`, `'repo_url'`, and `'publish_to_pypi'`.
+
+        Raises:
+            ReleaseFailedError: If the configuration file is not found at the specified path or if an error occurs during parsing.
+        """
         try:
             pyproject = toml.load(path)
             config = pyproject.get("tool", {}).get("avcmt", {}).get("release", {})
@@ -101,7 +140,18 @@ class ReleaseManager:
 
     @staticmethod
     def _run_command(command: list[str], sensitive_output: bool = False):
-        """Helper to run any command and handle errors."""
+        """Performs a command in a subprocess, captures its output, and raises a custom exception if the command fails. It executes the provided command list with optional suppression of output logging, returning the command's standard output as a string with whitespace trimmed; raises a ReleaseFailedError if the command execution fails.
+
+        Args:
+        - command (list of str): The command and its arguments to run.
+        - sensitive_output (bool, optional): If True, suppresses debug logging of the command's output. Defaults to False.
+
+        Returns:
+        - str: The trimmed standard output from the command execution.
+
+        Raises:
+        - ReleaseFailedError: If the command fails to execute successfully.
+        """
         try:
             process = subprocess.run(
                 command, check=True, capture_output=True, text=True, encoding="utf-8"
@@ -116,7 +166,14 @@ class ReleaseManager:
 
     @staticmethod
     def _get_latest_tag() -> str:
-        """Gets the latest git tag, defaulting to v0.0.0 if none exists."""
+        """Gets the latest Git tag, defaulting to "v0.0.0" if no tags are found. This method attempts to retrieve the most recent tag in the Git repository using the `git describe --tags --abbrev=0` command. If the command fails, it logs a warning and returns the default tag "v0.0.0".
+
+        Args:
+            None
+
+        Returns:
+            str: The latest Git tag as a string, or "v0.0.0" if no tags are available.
+        """
         try:
             return ReleaseManager._run_command(
                 ["git", "describe", "--tags", "--abbrev=0"]
@@ -127,7 +184,14 @@ class ReleaseManager:
 
     @staticmethod
     def _get_commits_since_tag(tag: str) -> list[dict[str, str]]:
-        """Gets all commit hashes and subjects since a given tag."""
+        """Gets all commit hashes and subjects since a specified Git tag, returning a list of dictionaries containing the hash and subject of each commit.
+
+        Args:
+            tag (str): The Git tag from which to start retrieving commits.
+
+        Returns:
+            list[dict[str, str]]: A list of dictionaries, each with 'hash' and 'subject' keys representing individual commits.
+        """
         # Use a delimiter that is unlikely to be in a commit message
         delimiter = "|||---|||"
         output = ReleaseManager._run_command(
@@ -145,7 +209,14 @@ class ReleaseManager:
 
     @staticmethod
     def _push_changes():
-        """Pushes commits and tags to the remote repository."""
+        """Pushes local commits and tags to the remote Git repository. This method executes the necessary Git commands to push any local commits and tags to the remote repository, ensuring that all changes are synchronized.
+
+        Args: None
+
+        Returns: None
+
+        Raises: RuntimeError if the git push commands fail.
+        """
         ReleaseManager._run_command(["git", "push"])
         ReleaseManager._run_command(["git", "push", "--tags"])
         logger.info("Successfully pushed commits and tags.")
@@ -153,7 +224,17 @@ class ReleaseManager:
     # --- Instance Methods (Stateful Workflow) ---
 
     def _pre_flight_checks(self):
-        """Performs checks to ensure the repository is in a clean state for release."""
+        """Performs pre-flight validations to ensure the Git repository is in a clean state and on the correct release branch before proceeding with a release; verifies absence of uncommitted changes and correct branch alignment.
+
+        Args:
+        None
+
+        Returns:
+        None
+
+        Raises:
+        ReleaseFailedError: If uncommitted changes are detected or if the current branch does not match the specified release branch.
+        """
         logger.info("Performing pre-flight checks...")
 
         # 1. Check for uncommitted changes
@@ -175,7 +256,14 @@ class ReleaseManager:
         logger.info("Pre-flight checks passed successfully.")
 
     def _detect_bump(self) -> str | None:
-        """Detects version bump type based on instance's commit messages."""
+        """Detects the type of version bump (major, minor, or patch) based on commit messages associated with the instance; analyzes commits to identify breaking changes, new features, or bug fixes to determine the appropriate Semantic Versioning (SemVer) bump type. Returns the bump type as a string ("major", "minor", "patch") or None if no relevant commits are found.
+
+        Args:
+            None
+
+        Returns:
+            str or None: The type of version bump ("major", "minor", "patch") or None if no relevant commit messages are detected.
+        """
         bump_type: str | None = None
         for c in self.commits:
             subject = c["subject"]
@@ -188,7 +276,15 @@ class ReleaseManager:
         return bump_type
 
     def _bump_version(self, bump_type: str) -> str:
-        """Bumps the version based on the old version stored in the instance."""
+        """Bumps the version number based on the specified bump type and returns the updated version string.
+        This method parses the current version from the instance, increments the major, minor, or patch component depending on the bump_type argument, and constructs a new version string in the format 'v<major>.<minor>.<patch>'.
+
+        Args:
+            bump_type (str): The type of version bump to perform. Valid values are "major", "minor", and "patch".
+
+        Returns:
+            str: The new version string following the format 'v<major>.<minor>.<patch>'.
+        """
         major, minor, patch = map(int, self.old_version.strip("v").split("."))
         if bump_type == "major":
             major, minor, patch = major + 1, 0, 0
@@ -199,7 +295,17 @@ class ReleaseManager:
         return f"v{major}.{minor}.{patch}"
 
     def _update_version_file(self):
-        """Updates the version in the file specified in the instance's config."""
+        """Updates the version information in a specified file by traversing nested keys derived from the version key path, modifying the version value, and saving the changes back to the file. Raises a ReleaseFailedError if the operation fails due to file access issues, missing keys, or other errors during the update process.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            ReleaseFailedError: If the version file cannot be read, the specified keys are missing, or an error occurs during file write operations.
+        """
         keys = self.version_key_path.split(".")
         try:
             with Path(self.version_file_path).open("r+", encoding="utf-8") as f:
@@ -226,9 +332,13 @@ class ReleaseManager:
     def _parse_and_group_commits_for_changelog(
         commits: list[dict[str, str]],
     ) -> dict[str, list[dict[str, Any]]]:
-        """
-        Parses conventional commits and groups them by type,
-        extracting type, scope, and description for better formatting.
+        """Parses a list of commit dictionaries following the Conventional Commits standard and groups them by type with extracted details for improved changelog formatting.
+
+        Args:
+            commits (list of dict): A list of commit dictionaries. Each dictionary should have at least the keys 'hash' and 'subject' representing the commit hash and subject line, respectively.
+
+        Returns:
+            dict: A dictionary where keys are commit types (e.g., 'feat', 'fix', 'other') and values are lists of dictionaries containing the commit 'hash' and parsed 'data' with details such as type, scope, breaking change indicator, and description.
         """
         grouped_commits = defaultdict(list)
         # Pattern to capture type, optional scope, breaking change, and description
@@ -272,9 +382,15 @@ class ReleaseManager:
         return grouped_commits
 
     def _generate_formatted_changelog_section(self) -> str:
-        """
-        Parses conventional commits and generates a formatted changelog section with commit links.
-        This version applies improved formatting.
+        """Generates a formatted changelog section in Markdown format based on stored commit data.
+
+        This method processes commit information to create a structured Markdown section suitable for appending to a changelog file. It groups commits by type, adds headers with emojis or titles, formats individual commit entries with optional links to specific commits in the repository, and includes the new version number along with the current date. The output provides a clear, organized summary of changes, enhancing changelog readability and consistency.
+
+        Args:
+            None
+
+        Returns:
+            str: A string containing the complete formatted changelog section, including headers, commit entries with optional links, and the version and date header.
         """
         grouped_commits = self._parse_and_group_commits_for_changelog(self.commits)
         repo_url = self.config.get("repo_url")
@@ -335,9 +451,13 @@ class ReleaseManager:
         )
 
     def _update_changelog(self):
-        """
-        Updates the changelog file by inserting the new formatted section
-        at the correct position, ensuring backward compatibility with old markers.
+        """Performs an update to the changelog file by inserting a new formatted release section at the appropriate position, handling legacy markers for backward compatibility, and creating the file if it does not exist. Raises a `ReleaseFailedError` if writing to the file fails.
+
+        Args:
+            None
+
+        Returns:
+            None
         """
         path = Path(self.config["changelog_file"])
         new_section = self._generate_formatted_changelog_section()
@@ -383,7 +503,7 @@ class ReleaseManager:
             raise ReleaseFailedError(f"Failed to write to changelog {path}: {e}") from e
 
     def _commit_and_tag(self):
-        """Commits and tags the new version."""
+        """Performs staging, committing, and tagging of changes for a new version release using Git commands. It adds specified files, commits with a message including the new version, and creates a corresponding tag. This method may raise exceptions related to subprocess execution failures or Git errors."""
         files_to_add = [
             self.version_file_path,
             self.config["changelog_file"],
@@ -397,7 +517,17 @@ class ReleaseManager:
 
     @staticmethod
     def _publish_to_pypi():
-        """Builds and publishes the package to PyPI."""
+        """Builds and publishes the package to PyPI by executing build and publish commands; raises an exception if the PYPI_TOKEN environment variable is not set.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            ReleaseFailedError: if the PYPI_TOKEN environment variable is missing.
+        """
         logger.info("Starting PyPI publishing process...")
         pypi_token = os.getenv("PYPI_TOKEN")
         if not pypi_token:
@@ -414,7 +544,16 @@ class ReleaseManager:
         logger.info("Successfully published to PyPI.")
 
     def run(self, dry_run: bool = False, push: bool = False):
-        """Main method to execute the entire release workflow."""
+        """Performs the release process by bumping the version, updating the changelog, and optionally publishing or pushing changes.
+        This method manages the full release workflow, including version detection, changelog generation, and deployment steps, with support for dry runs and conditional publishing.
+
+        Args:
+        - dry_run (bool): If True, simulate the release process without making any changes. Defaults to False.
+        - push (bool): If True, push the commits and tags to the remote repository. Defaults to False.
+
+        Returns:
+        - str: The new version string if the release proceeds successfully; otherwise, None if there are no updates to release.
+        """
         logger.info("--- ReleaseManager: Starting Release Process ---")
 
         if not dry_run:

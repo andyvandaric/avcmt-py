@@ -21,8 +21,16 @@ from openai import OpenAI
 
 
 class OpenaiProvider:
-    """
-    Provider for OpenAI and compatible APIs using the modern v1.x client.
+    """Generates a response string using the OpenAI ChatCompletion API based on the provided prompt and parameters. This method initializes an OpenAI client with the given API key, sends a chat completion request with specified model and additional parameters, and returns the content of the generated message.
+
+    Args:
+        prompt (str): The input prompt to generate a response for.
+        api_key (str): The API key used to authenticate with the OpenAI service.
+        model (str, optional): The model to use for generation; defaults to "gpt-4o".
+        **kwargs: Additional keyword arguments to customize the API request (e.g., temperature).
+
+    Returns:
+        str: The content of the generated response message.
     """
 
     DEFAULT_MODEL = "gpt-4o"
@@ -30,14 +38,15 @@ class OpenaiProvider:
     def generate(
         self, prompt: str, api_key: str, model: str | None = None, **kwargs
     ) -> str:
-        """
-        Generate response using the modern OpenAI ChatCompletion API.
+        """Generates a response from the OpenAI ChatCompletion API based on the provided prompt and parameters.
+
+        Creates a client instance with the specified API key, sends a chat completion request using the selected model and additional parameters, and returns the generated message content as a string.
 
         Args:
             prompt (str): Prompt input.
             api_key (str): OpenAI API key.
-            model (str): Model to use (default: gpt-4o).
-            **kwargs: Additional OpenAI ChatCompletion params (e.g., temperature).
+            model (str, optional): Model to use (default: gpt-4o).
+            **kwargs: Additional OpenAI ChatCompletion parameters (e.g., temperature).
 
         Returns:
             str: Generated response content.

@@ -25,18 +25,18 @@ from importlib import import_module
 def generate_with_ai(
     prompt, provider="pollinations", api_key=None, model="gemini", **kwargs
 ):
-    """
-    Universal AI commit message generator, routed to provider class.
+    """Generates AI-based content such as commit messages using the specified provider and model.
+    This function dynamically loads and initializes the provider class, sets the API key, and invokes the provider's generate method with the provided prompt and additional parameters.
 
     Args:
-        prompt (str): Prompt string.
-        provider (str): Provider name, must match file/class in avcmt/providers/.
-        api_key (str): API key for the provider.
-        model (str): Model name (if provider supports).
-        **kwargs: Extra args for provider.
+        prompt (str): The input prompt used to generate content.
+        provider (str): The name of the provider module and class to use; defaults to "pollinations".
+        api_key (str, optional): The API key for authenticating with the provider; if not provided, attempts to load from environment variables.
+        model (str): The name of the model to use with the provider; defaults to "gemini".
+        **kwargs: Additional keyword arguments to pass to the provider's generate method.
 
     Returns:
-        str: AI-generated content.
+        str: The generated content produced by the AI provider.
     """
     try:
         provider_module = import_module(f"avcmt.providers.{provider}")

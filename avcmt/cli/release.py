@@ -50,13 +50,14 @@ def run_release_command(
         help="Push the release commit and tag to the remote repository.",
     ),
 ) -> None:
-    """
-    Execute the semantic release process.
+    """Executes the semantic release process, handling version bumping, changelog generation, and optional pushing; manages release failures and unexpected errors gracefully.
 
-    This command orchestrates fetching latest tags, detecting version bumps
-    based on conventional commits, updating version files, generating
-    changelogs, creating git commits and tags, and optionally pushing
-    changes to a remote repository and publishing to PyPI.
+    Args:
+        dry_run (bool): If True, simulates the release without modifying files or pushing changes. Defaults to False.
+        push (bool): If True, pushes the release commit and tags to the remote repository after a successful release. Defaults to False.
+
+    Returns:
+        None.
     """
     logger.info("Initiating release process via CLI (run subcommand)...")
     try:
