@@ -17,8 +17,12 @@
 
 import logging
 import re
+import signal
 import subprocess
+import sys
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader  # ADDED: Import Jinja2
@@ -352,6 +356,29 @@ def clear_docs_dry_run_file() -> bool:
     return False
 
 
+# NEW: Graceful shutdown context manager
+# FINAL: This is the definitive, clean context manager.
+@contextmanager
+def graceful_shutdown_manager():
+    """A context manager to handle KeyboardInterrupt (CTRL+C) gracefully."""
+    shutdown_event = threading.Event()
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    def new_handler(signum, frame):
+        """Signal handler that sets the shutdown event."""
+        if not shutdown_event.is_set():
+            # FIXED: Use standard print to stderr instead of Typer
+            print("\nCTRL+C detected. Signaling workers to stop...", file=sys.stderr)
+            shutdown_event.set()
+
+    try:
+        signal.signal(signal.SIGINT, new_handler)
+        yield shutdown_event
+    finally:
+        if original_handler:
+            signal.signal(signal.SIGINT, original_handler)
+
+
 __all__ = [
     "clean_ai_response",
     "clean_docstring_response",
@@ -365,6 +392,7 @@ __all__ = [
     "get_log_dir",
     "get_log_file",
     "get_staged_files",
+    "graceful_shutdown_manager",
     "is_recent_dry_run",
     "read_docs_dry_run_file",
     "read_dry_run_file",
