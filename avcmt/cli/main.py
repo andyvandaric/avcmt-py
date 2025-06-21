@@ -1,3 +1,4 @@
+# >> avcmt/cli/main.py
 # =================================================================
 # File: avcmt/cli/main.py (REVISED)
 #
@@ -28,9 +29,10 @@ import toml
 import typer
 
 # --- Sub-command Imports ---
-# CHANGE: We now import the module as an 'app' to be added.
-from .commit import app as commit_app
-from .release import app as release_app  # ADDED: Import the release Typer app
+# We now import the app instance from each command module.
+from avcmt.cli.commit import app as commit_app
+from avcmt.cli.docs import app as docs_app  # ADDED: Import the docs Typer app
+from avcmt.cli.release import app as release_app
 
 app = typer.Typer(
     name="avcmt",
@@ -44,7 +46,17 @@ app = typer.Typer(
 
 
 def _version_callback(value: bool) -> None:
-    """Callback to display the application version and exit."""
+    """Displays the application version retrieved from pyproject.toml if the input value is True, then exits the program. If the version information cannot be found or the file is missing or malformed, outputs an error message before exiting.
+
+    Args:
+        value (bool): A boolean flag indicating whether to display the version and exit.
+
+    Returns:
+        None
+
+    Raises:
+        typer.Exit: Exits the program after attempting to display the version or an error message.
+    """
     if value:
         try:
             pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
@@ -73,9 +85,13 @@ def main_callback(
         ),
     ] = None,
 ) -> None:
-    """
-    AI-Powered toolkit for development automation.
-    Use `avcmt [COMMAND] --help` for more information on a specific command.
+    """Displays the application version information when the --version or -v option is used. If the flag is set, shows the version and exits; otherwise, provides guidance on using other commands with avcmt.
+
+    Args:
+        version (bool or None, optional): A flag indicating whether to display the application version, set via command-line options --version or -v. Defaults to None.
+
+    Returns:
+        None
     """
     pass
 
@@ -84,8 +100,9 @@ def main_callback(
 # CHANGE: We now register the function as a command.
 # The decorator automatically handles converting the function's parameters
 # into CLI options like --dry-run, --push, etc.
-app.add_typer(commit_app)
-app.add_typer(release_app)  # ADDED: Register the release Typer app
+app.add_typer(commit_app, name="commit")
+app.add_typer(release_app, name="release")
+app.add_typer(docs_app, name="docs")  # ADDED: Register the docs Typer app
 
 if __name__ == "__main__":
     app()

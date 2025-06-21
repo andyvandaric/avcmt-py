@@ -78,8 +78,17 @@ def run_commit(
         ),
     ] = False,
 ) -> None:
-    """
-    Generates semantic commit messages for staged changes (main functionality).
+    """Performs a commit operation with optional dry-run, push, debug, and rebuild settings, while configuring logging and invoking the commit process.
+    Initializes logging, logs the provided options, and executes the commit process with the specified parameters.
+
+    Args:
+        dry_run (bool): If True, previews commit messages without applying to git. Defaults to False.
+        push (bool): If True, pushes commits to the remote repository after completion. Defaults to False.
+        debug (bool): If True, enables debug mode to show prompts and raw AI responses. Defaults to False.
+        force_rebuild (bool): If True, ignores recent dry-run cache and forces new AI suggestions. Defaults to False.
+
+    Returns:
+        None
     """
     log_file = get_log_file()
     logger = setup_logging(log_file)
@@ -99,7 +108,14 @@ def run_commit(
 
 @app.command("clear-cache")
 def clear_cache() -> None:
-    """Deletes the dry-run cache file."""
+    """Deletes the dry-run cache file if it exists, providing user feedback on the operation's success or failure.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     if clear_dry_run_file():
         typer.secho(
             "✅ Dry-run cache file cleared successfully.", fg=typer.colors.GREEN
@@ -110,7 +126,14 @@ def clear_cache() -> None:
 
 @app.command("list-cached")
 def list_cached() -> None:
-    """Displays the content of the last dry-run cache."""
+    """Displays the content of the last dry-run cache, indicating whether a cache exists and printing its contents if available. This function reads the dry-run cache file and outputs its contents to the terminal with appropriate messaging based on cache presence.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     content = read_dry_run_file()
     if content:
         typer.secho("--- Last Cached Dry-Run Messages ---", fg=typer.colors.CYAN)
@@ -121,7 +144,14 @@ def list_cached() -> None:
 
 @app.command("validate")
 def validate() -> None:
-    """Checks if there are any staged files ready to be committed."""
+    """Checks for staged files and provides user feedback accordingly, without returning any value.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     staged_files = get_staged_files()
     if staged_files:
         typer.secho(
