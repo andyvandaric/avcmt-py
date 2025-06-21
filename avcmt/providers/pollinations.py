@@ -14,6 +14,7 @@
 
 # File: avcmt/providers/pollinations.py
 
+import random
 import time
 
 import requests
@@ -37,10 +38,10 @@ class PollinationsProvider:
     """
 
     API_URL = "https://text.pollinations.ai/openai"
-    RETRY_DELAY = 2  # seconds
+    RETRY_DELAY = random.uniform(1, 3)  # seconds
     TIMEOUT = 60  # seconds
 
-    def generate(self, prompt, api_key, model="gemini", retries=3, **kwargs):
+    def generate(self, prompt, api_key, model="gemini", retries=7, **kwargs):
         """Generates a response from Pollinations AI based on the input prompt and specified parameters, handling retries upon failure.
 
         This method sends a request to the AI service with the provided prompt, API key, and model configuration, attempting multiple retries if errors occur.
