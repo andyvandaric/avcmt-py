@@ -2,6 +2,10 @@
 
 <!-- avcmt-release-marker -->
 
+## v1.7.0 (2025-06-21)
+
+### 🚀 Features
+- **feat(docs):** Introduce AI-powered docstring generation module ([`eadc294`](https://github.com/andyvandaric/avcmt-py/commit/eadc294))
 ## v1.6.0 (2025-06-20)
 
 ### 🚀 Features

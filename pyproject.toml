@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "avcmt-py"
-version = "1.6.0"
+version = "1.7.0"
 description = "avcmt-py: AI-Powered Semantic Release Style Git Commit Automation for Python Project."
 authors = [ "Andy Vandaric <andyvandaric@gmail.com>",]
 license = "Apache-2.0"
