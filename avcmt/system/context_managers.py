@@ -18,7 +18,6 @@ This module provides a context manager for handling signals gracefully.
 FINAL REVISION: Implements a 'double-press CTRL+C' shutdown mechanism for better UX.
 """
 
-import contextlib
 import os
 import signal
 import subprocess
@@ -122,20 +121,16 @@ class GracefulShutdownManager:
             # FIXED: Proper cross-platform termination with better error handling
             try:
                 if sys.platform == "win32":
-                    # Windows: Kill process tree using subprocess
-                    pid = os.getpid()
+                    # Windows: Kill process tree using taskkill
                     subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        ["taskkill", "/F", "/T", "/PID", str(os.getpid())],
                         capture_output=True,
+                        timeout=2,
                         check=False,
-                        timeout=5,
                     )
                 else:
-                    # Unix: Kill process group with proper exception handling
-                    with contextlib.suppress(
-                        OSError, ProcessLookupError, AttributeError
-                    ):
-                        os.killpg(os.getpgid(0), signal.SIGKILL)
+                    # Unix: Send SIGTERM to process group
+                    os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
             except Exception:
                 # All termination attempts failed, use fallback
                 pass
@@ -169,15 +164,15 @@ class GracefulShutdownManager:
             if dry_run_path.exists():
                 print(f"📄 Dry run results: {dry_run_path}", file=sys.stderr)
             else:
-                print("📄 Dry run results: No file generated", file=sys.stderr)
+                print("📄 No dry run results found", file=sys.stderr)
 
             if log_path.exists():
-                print(f"📜 Full log file:   {log_path}", file=sys.stderr)
+                print(f"📜 Full log file: {log_path}", file=sys.stderr)
             else:
-                print("📜 Full log file:   No log file found", file=sys.stderr)
+                print("📜 No log file found", file=sys.stderr)
 
             print("=" * 60 + "\n", file=sys.stderr)
 
         except Exception:
-            # Minimal fallback if imports or file operations fail
-            print("\n🛑 PROCESS ABORTED BY USER", file=sys.stderr)
+            # Silently ignore any errors in summary display
+            pass
