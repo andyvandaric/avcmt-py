@@ -28,7 +28,7 @@ import toml
 # Impor absolut dari dalam package Anda adalah best practice
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/semantic_release.log")
+logger = setup_logging("semantic_release.log")
 
 
 class ReleaseFailedError(Exception):

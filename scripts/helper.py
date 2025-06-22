@@ -6,7 +6,7 @@ from rich.table import Table
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/help_command.log")
+logger = setup_logging("help_command.log")
 
 
 def main():

@@ -90,9 +90,9 @@ def run_commit(
     Returns:
         None
     """
-    log_file = get_log_file()
-    logger = setup_logging(log_file)
-    logger.info(f"Log file for this run: {log_file}")
+    logger = setup_logging("commit.log")
+    log_file_path = get_log_file("commit.log")
+    logger.info(f"Log file for this run: {log_file_path}")
     logger.info("Invoking 'commit run' command with options:")
     logger.info(f"  dry_run: {dry_run}, push: {push}")
     logger.info(f"  debug: {debug}, force_rebuild: {force_rebuild}")

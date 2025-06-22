@@ -6,7 +6,7 @@ import sys
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/format_codebase.log")
+logger = setup_logging("format_codebase.log")
 
 
 def run_formatter():

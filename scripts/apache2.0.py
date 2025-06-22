@@ -46,7 +46,7 @@ README_PATH = "README.md"
 # Main directory for storing backups
 BACKUP_ROOT = "backup"
 # Log file path
-LOG_FILE_PATH = "log/license_migration.log"
+LOG_FILE_PATH = "license_migration.log"
 
 # --- TEMPLATES AND PATTERNS ---
 # Header template, now includes placeholders for copyright info.

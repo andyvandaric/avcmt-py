@@ -6,7 +6,7 @@ import sys
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/precommit_check.log")  # atau langsung default log
+logger = setup_logging("precommit_check.log")  # atau langsung default log
 
 
 def main():

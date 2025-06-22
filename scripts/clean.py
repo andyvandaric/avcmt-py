@@ -7,7 +7,7 @@ from pathlib import Path
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/clean_pycache.log")
+logger = setup_logging("clean_pycache.log")
 
 
 def remove_pycache_and_pyc():
