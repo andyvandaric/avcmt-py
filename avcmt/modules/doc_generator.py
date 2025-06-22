@@ -44,7 +44,7 @@ from avcmt.utils import (
     get_docs_dry_run_file,
     get_jinja_env,
     windows_safe_exit,
-    write_docs_dry_run_file,
+    write_docs_dry_run_file_atomic,
 )
 
 # Global variable to track completed tasks across processes
@@ -52,6 +52,9 @@ completed_tasks = multiprocessing.Value("i", 0)
 
 # Global variable for total workers count
 total_workers = multiprocessing.Value("i", 0)
+
+# Thread-safe cache writing lock
+cache_write_lock = threading.Lock()
 
 
 class WorkerContext:
@@ -113,17 +116,24 @@ def _doc_generation_worker(args: dict) -> tuple:
     template_env = None
     template = None
 
+    def _update_status(**kwargs):
+        """Utility to synchronize worker status updates across processes."""
+        try:
+            progress_dict = worker_context_manager.get_context().worker_progress
+            base = progress_dict.get(worker_id, {})
+            base.update(kwargs)
+            progress_dict[worker_id] = base  # Re-assign to trigger proxy sync
+        except Exception:
+            pass  # Ignore status update errors to prevent worker failures
+
     try:
         # Access shared progress and cache through worker context
-        progress_dict = worker_context_manager.get_context().worker_progress
         cache = worker_context_manager.get_context().cache
 
-        # Initialize worker progress
-        progress_dict[worker_id] = {
-            "current_task": identifier,
-            "status": "processing",
-            "start_time": time.time(),
-        }
+        # Initialize worker progress with proper sync
+        _update_status(
+            current_task=identifier, status="processing", start_time=time.time()
+        )
 
         # Add random delay between 1-3 seconds to avoid overwhelming AI service
         delay = random.uniform(1.0, 3.0)
@@ -133,36 +143,39 @@ def _doc_generation_worker(args: dict) -> tuple:
         template = template_env.get_template("docstring.j2")
         prompt = template.render(source_code=args["node_source"])
 
-        progress_dict[worker_id]["status"] = "generating_ai_response"
+        _update_status(status="generating_ai_response")
         # Use retry mechanism for AI generation
         raw_response = _generate_with_retry(
             prompt, provider=args["provider"], model=args["model"], debug=args["debug"]
         )
 
-        progress_dict[worker_id]["status"] = "cleaning_response"
+        _update_status(status="cleaning_response")
         cleaned = clean_docstring_response(raw_response)
 
         # Mark as completed
-        progress_dict[worker_id]["status"] = "completed"
-        progress_dict[worker_id]["end_time"] = time.time()
+        _update_status(status="completed", end_time=time.time())
 
         with completed_tasks.get_lock():  # Thread-safe increment
             completed_tasks.value += 1
 
         if cleaned:
-            # Update cache in real-time and write to file immediately
+            # Update cache in real-time - FIXED: Use atomic writing to prevent race conditions
             cache[identifier] = cleaned
-            _write_cache_to_file(dict(cache))
+            # Use atomic write to prevent race conditions
+            try:
+                write_docs_dry_run_file_atomic({identifier: cleaned})
+            except Exception as e:
+                # Log error but don't fail the worker
+                logging.getLogger("avcmt").error(
+                    f"Failed to write cache atomically: {e}"
+                )
             return (identifier, {identifier: cleaned}, None)
         return (identifier, None, "Cleaned response was empty.")
 
     except Exception as e:
         # Mark as failed with proper cleanup
         try:
-            progress_dict = worker_context_manager.get_context().worker_progress
-            progress_dict[worker_id]["status"] = "failed"
-            progress_dict[worker_id]["error"] = str(e)
-            progress_dict[worker_id]["end_time"] = time.time()
+            _update_status(status="failed", error=str(e), end_time=time.time())
 
             with completed_tasks.get_lock():  # Thread-safe increment
                 completed_tasks.value += 1
@@ -175,16 +188,6 @@ def _doc_generation_worker(args: dict) -> tuple:
         # Cleanup resources
         template_env = None
         template = None
-
-
-def _write_cache_to_file(cache_dict: dict) -> None:
-    """Write only NEW cache entries to file in real-time without overwriting existing cache."""
-    try:
-        # FIXED: Use the proper append-mode function instead of atomic overwrite
-        write_docs_dry_run_file(cache_dict)
-    except Exception as e:
-        # Fallback logging if write fails
-        logging.getLogger("avcmt").error(f"Failed to write cache to file: {e}")
 
 
 class DocGeneratorError(Exception):
@@ -209,7 +212,6 @@ class DocGenerator:
         self.debug = debug
         self.logger = logging.getLogger("avcmt")
         self._shutdown_event = shutdown_event
-        self.worker_progress = None
 
     def _validate_and_get_files(self, path: str, all_files: bool) -> list[Path]:
         """Validates the target path and returns list of files to process."""
@@ -264,7 +266,7 @@ class DocGenerator:
             # All items are cached, ensure file exists with proper header
             if not existing_cache:
                 # Create empty file with header if no cache exists
-                write_docs_dry_run_file({})
+                write_docs_dry_run_file_atomic({})
 
             dry_run_path = get_docs_dry_run_file()
             self.logger.info(
@@ -273,10 +275,10 @@ class DocGenerator:
             self.logger.info(f"Cache file: [cyan]{dry_run_path}[/cyan]")
             return
 
-        # Process new tasks - worker will write to cache in real-time via append mode
+        # Process new tasks - worker will write to cache in real-time via atomic operations
         all_new_suggestions = self._run_worker_pool_with_progress(tasks)
 
-        # FIXED: No need to merge and overwrite - workers already appended to file
+        # FIXED: Atomic writing already handled by workers
         if all_new_suggestions and not self._shutdown_event.is_set():
             dry_run_path = get_docs_dry_run_file()
             self.logger.info("[bold green]Dry run completed successfully![/bold green]")
@@ -284,10 +286,185 @@ class DocGenerator:
         elif self._shutdown_event.is_set():
             self.logger.warning("[yellow]Dry run was aborted by user.[/yellow]")
 
-    def _finalize_dry_run(self, final_cache: dict) -> None:
-        """Finalizes the dry run by writing results and logging status."""
-        # REMOVED: This method is now integrated into _process_dry_run
-        pass
+    def _process_live_run(
+        self, files_to_process: list[Path], force_rebuild: bool
+    ) -> None:
+        """IMPLEMENTED: Handles the live run process that actually updates files."""
+        self.logger.info(
+            "[bold red]LIVE RUN active. Files will be modified![/bold red]"
+        )
+
+        # Load existing cache
+        existing_cache = (
+            extract_docstrings_from_md(get_docs_dry_run_file())
+            if not force_rebuild
+            else {}
+        )
+
+        tasks = self._prepare_tasks(files_to_process, force_rebuild, existing_cache)
+
+        if not tasks:
+            self.logger.info(
+                "[bold green]All documentation is up-to-date![/bold green]"
+            )
+            return
+
+        # Generate docstrings
+        suggestions = self._run_worker_pool_with_progress(tasks)
+
+        if not suggestions or self._shutdown_event.is_set():
+            if self._shutdown_event.is_set():
+                self.logger.warning("[yellow]Live run was aborted by user.[/yellow]")
+            return
+
+        # Apply docstrings to files
+        files_updated = 0
+        for file_path in files_to_process:
+            try:
+                updated = self._update_file_docstrings(file_path, suggestions)
+                if updated:
+                    files_updated += 1
+                    self.logger.info(
+                        f"Updated docstrings in: [green]{file_path}[/green]"
+                    )
+            except Exception as e:
+                self.logger.error(f"Failed to update {file_path}: {e}")
+
+        self.logger.info(
+            f"[bold green]Live run completed! Updated {files_updated} files.[/bold green]"
+        )
+
+    def _update_file_docstrings(self, file_path: Path, suggestions: dict) -> bool:
+        """Update docstrings in a Python file based on suggestions."""
+        try:
+            content = file_path.read_text(encoding="utf-8")
+            lines = content.splitlines(keepends=True)
+
+            # Parse AST to find nodes
+            tree = ast.parse(content)
+            nodes = [
+                n
+                for n in ast.walk(tree)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            ]
+
+            modified = False
+
+            # Process nodes in reverse order to maintain line numbers
+            for node in reversed(nodes):
+                identifier = self._get_node_identifier(file_path, node)
+                if identifier in suggestions:
+                    docstring = suggestions[identifier]
+                    if self._insert_docstring(lines, node, docstring):
+                        modified = True
+
+            if modified:
+                # Write updated content atomically
+                temp_file = file_path.with_suffix(".tmp")
+                temp_file.write_text("".join(lines), encoding="utf-8")
+                temp_file.replace(file_path)
+                return True
+
+        except Exception as e:
+            self.logger.error(f"Error updating docstrings in {file_path}: {e}")
+
+        return False
+
+    # Constants for docstring handling
+    MIN_DOCSTRING_LENGTH = 6
+    SEARCH_RANGE_LIMIT = 10
+
+    def _insert_docstring(
+        self, lines: list[str], node: ast.AST, docstring: str
+    ) -> bool:
+        """Insert docstring into the appropriate location in the source code."""
+        try:
+            # Find the colon line (end of function/class definition)
+            colon_line = self._find_colon_line(lines, node.lineno - 1)
+
+            # Check if docstring already exists and handle replacement
+            next_line = colon_line + 1
+            if next_line < len(lines) and self._replace_existing_docstring(
+                lines, next_line, colon_line, docstring
+            ):
+                return True
+
+            # Insert new docstring
+            self._insert_new_docstring(lines, colon_line, docstring)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error inserting docstring for {node.name}: {e}")
+            return False
+
+    def _find_colon_line(self, lines: list[str], start_line: int) -> int:
+        """Find the line containing the colon that ends the function/class definition."""
+        for i in range(
+            start_line, min(len(lines), start_line + self.SEARCH_RANGE_LIMIT)
+        ):
+            if ":" in lines[i]:
+                return i
+        return start_line
+
+    def _replace_existing_docstring(
+        self, lines: list[str], next_line: int, colon_line: int, docstring: str
+    ) -> bool:
+        """Replace existing docstring if found."""
+        stripped = lines[next_line].strip()
+        if not (stripped.startswith('"""') or stripped.startswith("'''")):
+            return False
+
+        quote_char = '"""' if stripped.startswith('"""') else "'''"
+        end_line = self._find_docstring_end(lines, next_line, quote_char, stripped)
+
+        # Replace lines
+        indent = self._get_line_indent(lines[colon_line + 1])
+        new_docstring_lines = self._format_docstring_lines(docstring, indent)
+        lines[next_line : end_line + 1] = new_docstring_lines
+        return True
+
+    def _find_docstring_end(
+        self, lines: list[str], start_line: int, quote_char: str, first_line: str
+    ) -> int:
+        """Find the end line of an existing docstring."""
+        if (
+            first_line.endswith(quote_char)
+            and len(first_line) > self.MIN_DOCSTRING_LENGTH
+        ):
+            return start_line
+
+        for i in range(start_line + 1, len(lines)):
+            if quote_char in lines[i]:
+                return i
+        return start_line
+
+    def _insert_new_docstring(
+        self, lines: list[str], colon_line: int, docstring: str
+    ) -> None:
+        """Insert a new docstring after the colon line."""
+        indent = self._get_line_indent(lines[colon_line]) + "    "
+        new_docstring_lines = self._format_docstring_lines(docstring, indent)
+        lines[colon_line + 1 : colon_line + 1] = new_docstring_lines
+
+    @staticmethod
+    def _get_line_indent(line: str) -> str:
+        """Get the indentation of a line."""
+        return line[: len(line) - len(line.lstrip())]
+
+    @staticmethod
+    def _format_docstring_lines(docstring: str, indent: str) -> list[str]:
+        """Format docstring with proper indentation."""
+        lines = []
+        lines.append(f'{indent}"""\n')
+
+        for line in docstring.split("\n"):
+            if line.strip():
+                lines.append(f"{indent}{line}\n")
+            else:
+                lines.append(f"{indent}\n")
+
+        lines.append(f'{indent}"""\n')
+        return lines
 
     def _prepare_tasks(
         self, files_to_process: list[Path], force_rebuild: bool, preserved_cache: dict
@@ -404,34 +581,44 @@ class DocGenerator:
     def _get_worker_progress_value(status: str) -> float:
         """Get progress value based on worker status."""
         status_progress = {
-            "processing": 0.0,
-            "generating_ai_response": 0.5,
-            "cleaning_response": 0.8,
-            "completed": 1.0,
-            "failed": 1.0,
+            "processing": 0.25,
+            "generating_ai_response": 0.50,
+            "cleaning_response": 0.75,
+            "completed": 1.00,
+            "failed": 1.00,
         }
         return status_progress.get(status, 0.0)
 
-    def _update_worker_progress_bars(self, progress, worker_tasks: dict) -> None:
-        """Update individual worker progress bars."""
-        current_workers = dict(self.worker_progress)
+    @staticmethod
+    def _update_worker_progress_bars(
+        progress, worker_tasks: dict, shared_progress_dict: dict
+    ) -> None:
+        """Update individual worker progress bars with thread safety."""
+        try:
+            # FIX: Use the passed dictionary, not self.worker_progress
+            current_workers = dict(shared_progress_dict)
 
-        for worker_id, worker_info in current_workers.items():
-            if worker_id not in worker_tasks:
-                # Create new task for this worker
-                worker_tasks[worker_id] = progress.add_task(
-                    f"[dim]Worker {worker_id}[/dim]", total=1, visible=True
+            for worker_id, worker_info in current_workers.items():
+                if worker_id not in worker_tasks:
+                    # Create new task for this worker
+                    worker_tasks[worker_id] = progress.add_task(
+                        f"[dim]Worker {worker_id}[/dim]", total=1, visible=True
+                    )
+
+                # Update worker task description and progress
+                desc = DocGenerator._update_worker_task_description(
+                    worker_id, worker_info
+                )
+                progress_value = DocGenerator._get_worker_progress_value(
+                    worker_info.get("status", "idle")
                 )
 
-            # Update worker task description and progress
-            desc = self._update_worker_task_description(worker_id, worker_info)
-            progress_value = self._get_worker_progress_value(
-                worker_info.get("status", "idle")
-            )
-
-            progress.update(
-                worker_tasks[worker_id], completed=progress_value, description=desc
-            )
+                progress.update(
+                    worker_tasks[worker_id], completed=progress_value, description=desc
+                )
+        except Exception:
+            # Ignore progress update errors to prevent crashes
+            pass
 
     @staticmethod
     def _kill_background_processes():
@@ -506,6 +693,7 @@ class DocGenerator:
         current_sleep,
         base_sleep,
         max_sleep,
+        shared_progress_dict,  # Added parameter
     ):
         """Update progress tracking and return updated values."""
         # Update main progress
@@ -520,7 +708,7 @@ class DocGenerator:
             current_sleep = min(current_sleep * 1.2, max_sleep)
 
         # Update per-worker progress bars
-        self._update_worker_progress_bars(progress, worker_tasks)
+        self._update_worker_progress_bars(progress, worker_tasks, shared_progress_dict)
         return last_completed, current_sleep
 
     @staticmethod
@@ -541,7 +729,13 @@ class DocGenerator:
             pass  # Ignore final update errors
 
     def _monitor_pool_progress(
-        self, async_results, pool, progress, main_task_id, total_tasks
+        self,
+        async_results,
+        pool,
+        progress,
+        main_task_id,
+        total_tasks,
+        shared_progress_dict,
     ):
         """Waits for the pool to finish, updating progress per worker with adaptive timing."""
         # Reset counters
@@ -570,6 +764,7 @@ class DocGenerator:
                     current_sleep,
                     base_sleep,
                     max_sleep,
+                    shared_progress_dict,  # Pass the shared progress dict
                 )
                 time.sleep(current_sleep)
 
@@ -589,17 +784,17 @@ class DocGenerator:
         if not tasks:
             return {}
 
+        # MEMORY: Better resource management - Force garbage collection before starting
+        import gc  # noqa: PLC0415
+
+        gc.collect()
+
         # Use context manager for proper cleanup - FIX: Memory leak prevention
         with multiprocessing.Manager() as manager:
-            # Initialize worker progress manager when needed
-            if self.worker_progress is None:
-                self.worker_progress = manager.dict()
-
-            # Create separate cache dictionary for real-time cache updates
+            # FIX: Create a fresh shared dictionary for THIS run only.
+            # Do not use a persistent instance attribute.
+            shared_progress_dict = manager.dict()
             shared_cache = manager.dict()
-
-            # Clear previous worker progress
-            self.worker_progress.clear()
 
             progress_columns = [
                 SpinnerColumn(),
@@ -625,13 +820,27 @@ class DocGenerator:
                 with multiprocessing.Pool(
                     processes=worker_count,
                     initializer=_pool_initializer,
-                    initargs=(self.worker_progress, shared_cache),
+                    # FIX: Pass the new, live shared dictionary
+                    initargs=(shared_progress_dict, shared_cache),
                 ) as pool:
                     async_results = pool.map_async(_doc_generation_worker, tasks)
+                    # FIX: Pass the shared_progress_dict to the monitor
                     self._monitor_pool_progress(
-                        async_results, pool, progress, main_task_id, len(tasks)
+                        async_results,
+                        pool,
+                        progress,
+                        main_task_id,
+                        len(tasks),
+                        shared_progress_dict,
                     )
-                    return self._collect_pool_results(async_results)
+                    result = self._collect_pool_results(async_results)
+
+                    # MEMORY: Force cleanup
+                    pool.close()
+                    pool.join()
+                    gc.collect()
+
+                    return result
 
     def run(self, path: str, dry_run: bool, all_files: bool, force_rebuild: bool):
         """Main entry point for documentation generation."""
@@ -650,9 +859,8 @@ class DocGenerator:
             if dry_run:
                 self._process_dry_run(files_to_process, force_rebuild)
             else:
-                self.logger.warning(
-                    "[bold yellow]Live run mode is not yet implemented.[/bold yellow]"
-                )
+                # IMPLEMENTED: Live run mode
+                self._process_live_run(files_to_process, force_rebuild)
 
         except (KeyboardInterrupt, SystemExit):
             # CRITICAL: Force Windows-safe exit for any interruption

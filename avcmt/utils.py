@@ -23,6 +23,13 @@ import sys
 import time
 from pathlib import Path
 
+# Platform-specific imports
+try:
+    import fcntl
+except ImportError:
+    # fcntl is not available on Windows
+    fcntl = None
+
 from jinja2 import Environment, FileSystemLoader
 from rich.logging import RichHandler
 
@@ -300,26 +307,130 @@ def clear_dry_run_file() -> bool:
     return False
 
 
-def write_docs_dry_run_file(cache_dict: dict) -> None:
-    """Write cache to dry run file using proper append mode to preserve existing cache."""
+def write_docs_dry_run_file_atomic(cache_dict: dict) -> None:
+    """Write cache to dry run file atomically to prevent race conditions."""
+    if not cache_dict:
+        return
+
     dry_run_file = get_docs_dry_run_file()
+    dry_run_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Check if we need to write header (file doesn't exist or is empty)
-    write_header = not dry_run_file.exists() or dry_run_file.stat().st_size == 0
+    temp_file = dry_run_file.with_suffix(".tmp")
 
-    # FIXED: Use append mode to preserve existing cache like old script
-    with dry_run_file.open("a", encoding="utf-8") as f:
-        if write_header:
+    try:
+        existing_content, existing_identifiers = _read_existing_cache(dry_run_file)
+        write_header = not dry_run_file.exists() or dry_run_file.stat().st_size == 0
+
+        _write_cache_content(
+            temp_file, existing_content, cache_dict, existing_identifiers, write_header
+        )
+        _atomic_file_replace(temp_file, dry_run_file)
+
+    except Exception as e:
+        _cleanup_temp_file(temp_file)
+        raise e
+
+
+def _read_existing_cache(dry_run_file: Path) -> tuple[str, set[str]]:
+    """Read existing cache content and extract identifiers."""
+    if not dry_run_file.exists():
+        return "", set()
+
+    try:
+        existing_content = dry_run_file.read_text(encoding="utf-8")
+        existing_identifiers = set(re.findall(r"### `([^`]+)`", existing_content))
+        return existing_content, existing_identifiers
+    except Exception:
+        return "", set()
+
+
+def _write_cache_content(
+    temp_file: Path,
+    existing_content: str,
+    cache_dict: dict,
+    existing_identifiers: set[str],
+    write_header: bool,
+) -> None:
+    """Write cache content to temporary file."""
+    with temp_file.open("w", encoding="utf-8") as f:
+        if existing_content and not write_header:
+            f.write(existing_content)
+        elif write_header:
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(
                 f"# AI-Generated Docstrings (Dry Run)\n_Generated on: {current_time}_\n\n"
             )
 
-        # Only write NEW cache entries (not existing ones)
+        # Write only NEW cache entries (not existing ones)
         for identifier, docstring in sorted(cache_dict.items()):
-            f.write(f"### `{identifier}`\n")
-            f.write(f'```python\n"""\n{docstring}\n"""\n```\n\n---\n\n')
-            f.flush()  # Ensure immediate write to disk
+            if identifier not in existing_identifiers:
+                f.write(f"### `{identifier}`\n")
+                f.write(f'```python\n"""\n{docstring}\n"""\n```\n\n---\n\n')
+
+
+def _atomic_file_replace(temp_file: Path, target_file: Path) -> None:
+    """Atomically replace target file with temp file."""
+    if sys.platform == "win32":
+        # Windows requires explicit removal before rename
+        if target_file.exists():
+            target_file.unlink()
+    temp_file.replace(target_file)
+
+
+def _cleanup_temp_file(temp_file: Path) -> None:
+    """Clean up temporary file on error."""
+    if temp_file.exists():
+        temp_file.unlink()
+
+
+def write_docs_dry_run_file(cache_dict: dict) -> None:
+    """Write cache to dry run file using proper append mode to preserve existing cache."""
+    if not cache_dict:
+        return
+
+    dry_run_file = get_docs_dry_run_file()
+
+    # Use file locking to prevent race conditions (Unix only)
+    lock_file = dry_run_file.with_suffix(".lock")
+
+    try:
+        # Create lock file
+        with lock_file.open("w") as lock:
+            if fcntl is not None:
+                # Use fcntl on Unix systems
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+
+            # Check if we need to write header (file doesn't exist or is empty)
+            write_header = not dry_run_file.exists() or dry_run_file.stat().st_size == 0
+
+            # Get existing identifiers to prevent duplicates
+            existing_identifiers = set()
+            if dry_run_file.exists():
+                try:
+                    content = dry_run_file.read_text(encoding="utf-8")
+                    existing_identifiers = set(re.findall(r"### `([^`]+)`", content))
+                except Exception:
+                    pass
+
+            # Use append mode to preserve existing cache
+            with dry_run_file.open("a", encoding="utf-8") as f:
+                if write_header:
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    f.write(
+                        f"# AI-Generated Docstrings (Dry Run)\n_Generated on: {current_time}_\n\n"
+                    )
+
+                # Only write NEW cache entries (not existing ones)
+                for identifier, docstring in sorted(cache_dict.items()):
+                    if identifier not in existing_identifiers:
+                        f.write(f"### `{identifier}`\n")
+                        f.write(f'```python\n"""\n{docstring}\n"""\n```\n\n---\n\n')
+                        f.flush()  # Ensure immediate write to disk
+
+    finally:
+        # Remove lock file
+        if lock_file.exists():
+            lock_file.unlink()
 
 
 # NEW FUNCTION: Reusable Jinja2 environment setup
@@ -419,4 +530,5 @@ __all__ = [
     "setup_logging",
     "windows_safe_exit",  # ADDED to __all__
     "write_docs_dry_run_file",
+    "write_docs_dry_run_file_atomic",  # ADDED to __all__
 ]

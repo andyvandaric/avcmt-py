@@ -201,6 +201,17 @@ def run_doc_updater(
     logger = _setup_logging_and_validation(debug)
     _log_run_info(logger, dry_run, all_files)
 
+    # ENHANCED: Show mode warning for live runs
+    if not dry_run:
+        typer.secho(
+            "⚠️  LIVE RUN MODE: Files will be modified directly!",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        if not typer.confirm("Continue with live run?"):
+            typer.echo("Operation cancelled.")
+            return
+
     # Execute with graceful shutdown handling
     with GracefulShutdownManager() as shutdown_event:
         exit_code = _execute_doc_generation(
@@ -217,8 +228,21 @@ def run_doc_updater(
 @app.command("list-cached")
 def list_cached() -> None:
     """Displays the content of the last docs dry-run cache."""
-    # This should be implemented to read the file properly
-    typer.echo("This command should be re-implemented to parse the new dry-run format.")
+    dry_run_path = get_docs_dry_run_file()
+
+    if not dry_run_path.exists():
+        typer.secho("[i] No docs dry-run cache file found.", fg=typer.colors.YELLOW)
+        return
+
+    try:
+        content = dry_run_path.read_text(encoding="utf-8")
+        if content.strip():
+            typer.echo("📄 Docs dry-run cache contents:")
+            typer.echo(content)
+        else:
+            typer.secho("[i] Docs dry-run cache file is empty.", fg=typer.colors.YELLOW)
+    except Exception as e:
+        typer.secho(f"❌ Error reading cache file: {e}", fg=typer.colors.RED, err=True)
 
 
 @app.command("clear-cache")
