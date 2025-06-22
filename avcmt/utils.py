@@ -15,33 +15,36 @@
 # File: avcmt/utils.py
 # Revision v3 - Added clean_ai_response, simplified extraction, and reusable Jinja2 environment setup.
 
+import datetime
 import logging
 import re
-import signal
 import subprocess
 import sys
-import threading
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader  # ADDED: Import Jinja2
+from jinja2 import Environment, FileSystemLoader
+from rich.logging import RichHandler
+
+
+def windows_safe_exit(exit_code: int = 0) -> None:
+    """Performs Windows-safe exit with proper cleanup."""
+    sys.exit(exit_code)
 
 
 def get_log_dir() -> Path:
-    """Returns the Path object representing the log directory, creating the directory and any necessary parent directories if they do not already exist.
-
-    Returns:
-        Path: The Path object pointing to the log directory.
-    """
+    """Returns the Path object for the log directory, creating it if needed."""
     log_dir = Path(__file__).parent.parent / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
 
-def get_log_file() -> Path:
-    """Returns the full file path to the "commit_group_all.log" file located in the directory specified by get_log_dir(). This function constructs and returns a Path object by joining the directory path provided by get_log_dir() with the log file name. It may raise an exception if get_log_dir() encounters an error or returns an invalid path."""
-    return get_log_dir() / "commit_group_all.log"
+def get_log_file(filename: str) -> Path:
+    """
+    Returns the full path to a specific log file inside the log directory.
+    FIXED: Now correctly takes a filename instead of a hardcoded path.
+    """
+    return get_log_dir() / filename
 
 
 def get_dry_run_file() -> Path:
@@ -177,62 +180,70 @@ def extract_commit_messages_from_md(filepath: Path | str) -> dict[str, str]:
 
 
 def extract_docstrings_from_md(filepath: Path | str) -> dict[str, str]:
-    """Extracts Python function and class docstrings from a Markdown file by parsing code blocks associated with specific identifiers.
-
-    The function takes a file path as input, reads the content of the Markdown file, and uses a regex pattern to find code blocks containing docstrings linked to specific identifiers formatted as module paths. It returns a dictionary mapping each identifier to its corresponding docstring content as a string. If the file does not exist, it returns an empty dictionary.
-    """
+    """Extracts Python function and class docstrings from a Markdown file with optimized parsing."""
     path = Path(filepath)
     if not path.exists():
         return {}
-    with path.open(encoding="utf-8") as f:
-        content = f.read()
+
+    try:
+        # Use more efficient file reading with larger buffer
+        with path.open(encoding="utf-8", buffering=8192) as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        logging.getLogger("avcmt").warning(f"Failed to read cache file {path}: {e}")
+        return {}
+
+    if not content.strip():
+        return {}
 
     docstrings = {}
-    # Unique identifier pattern: ### `module.submodule.function_name`
+    # Optimized regex with compiled pattern for better performance
     pattern = re.compile(
-        r"### `(.*?)`.*?```python\n\"\"\"\n(.*?)\n\"\"\"\n```", re.DOTALL
+        r"### `([^`]+)`.*?```python\n\"\"\"\n(.*?)\n\"\"\"\n```",
+        re.DOTALL | re.MULTILINE,
     )
 
-    matches = pattern.findall(content)
-    for identifier, docstring_content in matches:
-        docstrings[identifier] = docstring_content.strip()
+    try:
+        matches = pattern.findall(content)
+        for identifier, docstring_content in matches:
+            # Validate identifier format to prevent invalid entries
+            if "." in identifier and docstring_content.strip():
+                docstrings[identifier] = docstring_content.strip()
+    except re.error as e:
+        logging.getLogger("avcmt").error(f"Regex error parsing cache: {e}")
+        return {}
 
     return docstrings
 
 
-def setup_logging(log_file: Path | str = "commit_group_all.log"):
-    """Sets up and configures a logger named 'avcmt' with file and console handlers, ensuring that logs are written to a specified file and output to the console.
-
-    Args:
-        log_file (Path | str): The file path where logs will be written. Defaults to "commit_group_all.log".
-
-    Returns:
-        logging.Logger: The configured logger instance with attached handlers.
-    """
-    # Menggunakan logger dengan nama 'avcmt' sebagai root untuk seluruh aplikasi
+def setup_logging(log_filename: str, rich_console: bool = False) -> logging.Logger:
+    """Sets up a logger with file and console handlers."""
     logger = logging.getLogger("avcmt")
     logger.setLevel(logging.INFO)
 
-    # BUG FIX: Hapus handler yang ada untuk memastikan log selalu baru
     if logger.hasHandlers():
         logger.handlers.clear()
 
-    log_path = Path(log_file)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path = get_log_file(log_filename)
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Handler untuk menulis ke file (selalu menimpa dengan mode 'w')
-    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-    fh.setFormatter(formatter)
+    # FIXED: Use 'a' (append) mode for file handler
+    fh = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+    fh.setFormatter(file_formatter)
     logger.addHandler(fh)
 
-    # Handler untuk menampilkan di konsol
-    sh = logging.StreamHandler()
-    sh.setFormatter(formatter)
-    logger.addHandler(sh)
+    # NEW: Use RichHandler for beautiful, non-conflicting console logs
+    if rich_console:
+        # The RichHandler will render logs above the progress bar
+        rich_handler = RichHandler(
+            show_path=False, markup=True, show_level=True, show_time=False
+        )
+        rich_handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+        logger.addHandler(rich_handler)
+    else:
+        sh = logging.StreamHandler()
+        sh.setFormatter(file_formatter)
+        logger.addHandler(sh)
 
     return logger
 
@@ -287,6 +298,28 @@ def clear_dry_run_file() -> bool:
         filepath.unlink()
         return True
     return False
+
+
+def write_docs_dry_run_file(cache_dict: dict) -> None:
+    """Write cache to dry run file using proper append mode to preserve existing cache."""
+    dry_run_file = get_docs_dry_run_file()
+
+    # Check if we need to write header (file doesn't exist or is empty)
+    write_header = not dry_run_file.exists() or dry_run_file.stat().st_size == 0
+
+    # FIXED: Use append mode to preserve existing cache like old script
+    with dry_run_file.open("a", encoding="utf-8") as f:
+        if write_header:
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(
+                f"# AI-Generated Docstrings (Dry Run)\n_Generated on: {current_time}_\n\n"
+            )
+
+        # Only write NEW cache entries (not existing ones)
+        for identifier, docstring in sorted(cache_dict.items()):
+            f.write(f"### `{identifier}`\n")
+            f.write(f'```python\n"""\n{docstring}\n"""\n```\n\n---\n\n')
+            f.flush()  # Ensure immediate write to disk
 
 
 # NEW FUNCTION: Reusable Jinja2 environment setup
@@ -356,34 +389,22 @@ def clear_docs_dry_run_file() -> bool:
     return False
 
 
+def clear_log_file(log_filename: str):
+    """Clears the specified log file to ensure a fresh start for each run."""
+    log_path = get_log_file(log_filename)
+    if log_path.exists():
+        log_path.write_text("", encoding="utf-8")
+
+
 # NEW: Graceful shutdown context manager
 # FINAL: This is the definitive, clean context manager.
-@contextmanager
-def graceful_shutdown_manager():
-    """A context manager to handle KeyboardInterrupt (CTRL+C) gracefully."""
-    shutdown_event = threading.Event()
-    original_handler = signal.getsignal(signal.SIGINT)
-
-    def new_handler(signum, frame):
-        """Signal handler that sets the shutdown event."""
-        if not shutdown_event.is_set():
-            # FIXED: Use standard print to stderr instead of Typer
-            print("\nCTRL+C detected. Signaling workers to stop...", file=sys.stderr)
-            shutdown_event.set()
-
-    try:
-        signal.signal(signal.SIGINT, new_handler)
-        yield shutdown_event
-    finally:
-        if original_handler:
-            signal.signal(signal.SIGINT, original_handler)
-
 
 __all__ = [
     "clean_ai_response",
     "clean_docstring_response",
     "clear_docs_dry_run_file",
     "clear_dry_run_file",
+    "clear_log_file",  # ADDED to __all__
     "extract_commit_messages_from_md",
     "extract_docstrings_from_md",
     "get_docs_dry_run_file",
@@ -392,9 +413,10 @@ __all__ = [
     "get_log_dir",
     "get_log_file",
     "get_staged_files",
-    "graceful_shutdown_manager",
     "is_recent_dry_run",
     "read_docs_dry_run_file",
     "read_dry_run_file",
     "setup_logging",
+    "windows_safe_exit",  # ADDED to __all__
+    "write_docs_dry_run_file",
 ]

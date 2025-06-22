@@ -6,7 +6,7 @@ import sys
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/setup_project.log")
+logger = setup_logging("setup_project.log")
 
 
 def run_cmd(cmd, desc):

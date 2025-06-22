@@ -6,7 +6,7 @@ import sys
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/lintfix_codebase.log")
+logger = setup_logging("lintfix_codebase.log")
 
 
 def run_lintfix():

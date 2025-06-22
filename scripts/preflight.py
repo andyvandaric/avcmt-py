@@ -6,7 +6,7 @@ import sys
 
 from avcmt.utils import setup_logging
 
-logger = setup_logging("log/preflight_pipeline.log")
+logger = setup_logging("preflight_pipeline.log")
 
 STEPS = [
     ("🔧 Environment setup", "poetry run setup"),

@@ -23,7 +23,7 @@ from avcmt.modules.release_manager import ReleaseFailedError, ReleaseManager
 from avcmt.utils import setup_logging
 
 # Initialize logger for this module
-logger = setup_logging("log/release_cli.log")
+logger = setup_logging("release_cli.log")
 
 # Create Typer instance for the 'release' sub-command
 app = typer.Typer(

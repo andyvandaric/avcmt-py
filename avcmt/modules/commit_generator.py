@@ -94,7 +94,7 @@ class CommitGenerator:
         self.force_rebuild = force_rebuild
         self.provider = provider
         self.model = model
-        self.logger = logger or setup_logging("log/commit.log")
+        self.logger = logger or setup_logging("commit.log")
         self.kwargs = kwargs
         self.dry_run_file = Path("log") / "commit_messages_dry_run.md"
         self.commit_template_env = get_jinja_env("commit")
