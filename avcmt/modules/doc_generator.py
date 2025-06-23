@@ -21,13 +21,17 @@ import logging
 import multiprocessing
 import os
 import random
+import re
+import shutil
 import signal
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 from pathlib import Path
 
+from jinja2 import Template
 from rich.progress import (
     BarColumn,
     Progress,
@@ -53,8 +57,37 @@ completed_tasks = multiprocessing.Value("i", 0)
 # Global variable for total workers count
 total_workers = multiprocessing.Value("i", 0)
 
-# Thread-safe cache writing lock
-cache_write_lock = threading.Lock()
+# Constants for docstring processing
+MIN_COMPLETE_DOCSTRING_PARTS = 3  # Minimum parts for complete inline docstring
+MIN_QUOTE_COUNT_FOR_INLINE = 2  # Minimum quote count for inline docstring detection
+BACKUP_ROOT = "backup"  # Backup directory root
+
+# Project root for robust path resolution
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Module-level template cache
+_template_cache: Template | None = None
+
+# Regex for stripping triple quotes
+_TRIPLE_QUOTE_RX = re.compile(r'^([ \t]*)[\'"]{3}|[\'"]{3}[ \t]*$')
+
+
+def _strip_quotes(doc: str) -> str:
+    """Remove leading/trailing triple quotes and surrounding blank lines."""
+    # Remove opening/closing """ lines
+    doc = _TRIPLE_QUOTE_RX.sub("", doc.strip())
+    # Remove one "accidental" indent level from template
+    return textwrap.dedent(doc).strip("\n")
+
+
+def _get_template() -> Template:
+    """Get cached Jinja template for docstring generation."""
+    # Use module-level cache instead of global statement
+    if _template_cache is None:
+        # This will be initialized once per worker process
+        template = get_jinja_env("docs").get_template("docstring.j2")
+        globals()["_template_cache"] = template
+    return _template_cache
 
 
 class WorkerContext:
@@ -112,10 +145,6 @@ def _doc_generation_worker(args: dict) -> tuple:
     worker_id = os.getpid()
     identifier = args["identifier"]
 
-    # Resource tracking for cleanup
-    template_env = None
-    template = None
-
     def _update_status(**kwargs):
         """Utility to synchronize worker status updates across processes."""
         try:
@@ -139,8 +168,8 @@ def _doc_generation_worker(args: dict) -> tuple:
         delay = random.uniform(1.0, 3.0)
         time.sleep(delay)
 
-        template_env = get_jinja_env("docs")
-        template = template_env.get_template("docstring.j2")
+        # Use cached template for efficiency
+        template = _get_template()
         prompt = template.render(source_code=args["node_source"])
 
         _update_status(status="generating_ai_response")
@@ -151,6 +180,7 @@ def _doc_generation_worker(args: dict) -> tuple:
 
         _update_status(status="cleaning_response")
         cleaned = clean_docstring_response(raw_response)
+        cleaned = _strip_quotes(cleaned)  # ⭐️ Strip quotes to get plain text
 
         # Mark as completed
         _update_status(status="completed", end_time=time.time())
@@ -159,7 +189,7 @@ def _doc_generation_worker(args: dict) -> tuple:
             completed_tasks.value += 1
 
         if cleaned:
-            # Update cache in real-time - FIXED: Use atomic writing to prevent race conditions
+            # Update both caches in real-time
             cache[identifier] = cleaned
             # Use atomic write to prevent race conditions
             try:
@@ -184,14 +214,59 @@ def _doc_generation_worker(args: dict) -> tuple:
 
         return (identifier, None, f"An exception occurred: {e}")
 
-    finally:
-        # Cleanup resources
-        template_env = None
-        template = None
-
 
 class DocGeneratorError(Exception):
     """Custom exception for doc generation failures."""
+
+
+def _create_backup(file_path: Path, backup_dir: Path, logger: logging.Logger) -> None:
+    """Copy *file_path* → *backup_dir* and log the operation; swallow errors."""
+    try:
+        rel = file_path.resolve().relative_to(Path.cwd().resolve())
+        dest = backup_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file_path, dest)
+        logger.info("📋 Backup created → %s", dest)
+    except Exception as exc:
+        logger.error("Backup failed for %s: %s", file_path, exc)
+
+
+def _legacy_update_docstring(
+    file_content: list[str], node: ast.stmt, new_docstring: str
+) -> list[str]:
+    """Updates the docstring of a specified function node within source code by inserting or replacing the existing docstring with a new one, properly formatted and indented."""
+    if not node.body:
+        # Cannot insert a docstring into an empty body (e.g., protocol stubs)
+        return file_content
+
+    # Determine indentation from the first statement of the function's body
+    first_body_stmt = node.body[0]
+    indent_str = " " * first_body_stmt.col_offset
+
+    # Format the new docstring with the correct indentation
+    docstring_lines = new_docstring.split("\n")
+    indented_lines = [f"{indent_str}{line}".rstrip() for line in docstring_lines]
+    formatted_docstring = f'{indent_str}"""{indented_lines[0].lstrip()}'
+    if len(indented_lines) > 1:
+        formatted_docstring += "\n" + "\n".join(indented_lines[1:])
+    formatted_docstring += f'\n{indent_str}"""\n'
+
+    # Check if a docstring already exists
+    has_existing_doc = isinstance(first_body_stmt, ast.Expr) and isinstance(
+        first_body_stmt.value, (ast.Constant, ast.Str)
+    )
+
+    if has_existing_doc:
+        # Replace the old docstring lines with the new one
+        start_line_idx = first_body_stmt.lineno - 1
+        end_line_idx = first_body_stmt.end_lineno
+        file_content[start_line_idx:end_line_idx] = [formatted_docstring]
+    else:
+        # Insert the new docstring before the first body statement
+        insertion_point_idx = first_body_stmt.lineno - 1
+        file_content.insert(insertion_point_idx, formatted_docstring)
+
+    return file_content
 
 
 class DocGenerator:
@@ -212,6 +287,7 @@ class DocGenerator:
         self.debug = debug
         self.logger = logging.getLogger("avcmt")
         self._shutdown_event = shutdown_event
+        self.last_backup_dir: Path | None = None
 
     def _validate_and_get_files(self, path: str, all_files: bool) -> list[Path]:
         """Validates the target path and returns list of files to process."""
@@ -235,7 +311,7 @@ class DocGenerator:
             self.logger.info("Cache cleared. All items will be processed.")
             return {}
 
-        # FIXED: Preserve existing cache like in old script
+        # Preserve existing cache
         preserved_cache = extract_docstrings_from_md(get_docs_dry_run_file())
         if preserved_cache:
             self.logger.info(f"Loaded {len(preserved_cache)} items from cache.")
@@ -243,98 +319,48 @@ class DocGenerator:
             self.logger.info("No existing cache found. Starting fresh.")
         return preserved_cache
 
-    def _process_dry_run(
-        self, files_to_process: list[Path], force_rebuild: bool
-    ) -> None:
-        """Handles the complete dry run process using append mode like the old script."""
-        self.logger.info("[bold cyan]DRY RUN active.[/bold cyan]")
+    @staticmethod
+    def _validate_syntax(lines: list[str]) -> bool:
+        """Validate that the given lines form syntactically correct Python code."""
+        try:
+            ast.parse("".join(lines))
+            return True
+        except SyntaxError:
+            return False
 
-        # FIXED: Use same logic as old script - clear only if force_rebuild
-        if force_rebuild:
-            self.logger.info("--force-rebuild active. Clearing existing cache.")
-            clear_docs_dry_run_file()
-            existing_cache = {}
-        else:
-            # FIXED: Always load existing cache when not force rebuilding
-            existing_cache = extract_docstrings_from_md(get_docs_dry_run_file())
-            if existing_cache:
-                self.logger.info(f"Loaded {len(existing_cache)} items from cache.")
+    def _update_docstring_with_fallback(
+        self, lines: list[str], node: ast.AST, docstring: str
+    ) -> tuple[bool, list[str]]:
+        """Update docstring with fallback to legacy method and syntax validation."""
+        original_lines = lines.copy()  # Keep original for fallback
 
-        tasks = self._prepare_tasks(files_to_process, force_rebuild, existing_cache)
+        # Try new insertion method first
+        success = self._insert_docstring(lines, node, docstring)
 
-        if not tasks:
-            # All items are cached, ensure file exists with proper header
-            if not existing_cache:
-                # Create empty file with header if no cache exists
-                write_docs_dry_run_file_atomic({})
+        if not success:
+            # Fallback to legacy algorithm - create a fresh copy
+            lines[:] = _legacy_update_docstring(original_lines.copy(), node, docstring)
+            success = lines != original_lines
 
-            dry_run_path = get_docs_dry_run_file()
-            self.logger.info(
-                "[bold green]All documentation is up-to-date![/bold green]"
+        # Compile check - ensure resulting file is valid python
+        if success and not self._validate_syntax(lines):
+            # Try legacy method if new method failed validation
+            legacy_lines = _legacy_update_docstring(
+                original_lines.copy(), node, docstring
             )
-            self.logger.info(f"Cache file: [cyan]{dry_run_path}[/cyan]")
-            return
+            if self._validate_syntax(legacy_lines):
+                lines[:] = legacy_lines
+                success = True
+            else:
+                # If both methods fail validation, revert to original
+                lines[:] = original_lines
+                success = False
 
-        # Process new tasks - worker will write to cache in real-time via atomic operations
-        all_new_suggestions = self._run_worker_pool_with_progress(tasks)
+        return success, lines
 
-        # FIXED: Atomic writing already handled by workers
-        if all_new_suggestions and not self._shutdown_event.is_set():
-            dry_run_path = get_docs_dry_run_file()
-            self.logger.info("[bold green]Dry run completed successfully![/bold green]")
-            self.logger.info(f"Results saved to: [cyan]{dry_run_path}[/cyan]")
-        elif self._shutdown_event.is_set():
-            self.logger.warning("[yellow]Dry run was aborted by user.[/yellow]")
-
-    def _process_live_run(
-        self, files_to_process: list[Path], force_rebuild: bool
-    ) -> None:
-        """IMPLEMENTED: Handles the live run process that actually updates files."""
-        self.logger.info(
-            "[bold red]LIVE RUN active. Files will be modified![/bold red]"
-        )
-
-        # Load existing cache
-        existing_cache = (
-            extract_docstrings_from_md(get_docs_dry_run_file())
-            if not force_rebuild
-            else {}
-        )
-
-        tasks = self._prepare_tasks(files_to_process, force_rebuild, existing_cache)
-
-        if not tasks:
-            self.logger.info(
-                "[bold green]All documentation is up-to-date![/bold green]"
-            )
-            return
-
-        # Generate docstrings
-        suggestions = self._run_worker_pool_with_progress(tasks)
-
-        if not suggestions or self._shutdown_event.is_set():
-            if self._shutdown_event.is_set():
-                self.logger.warning("[yellow]Live run was aborted by user.[/yellow]")
-            return
-
-        # Apply docstrings to files
-        files_updated = 0
-        for file_path in files_to_process:
-            try:
-                updated = self._update_file_docstrings(file_path, suggestions)
-                if updated:
-                    files_updated += 1
-                    self.logger.info(
-                        f"Updated docstrings in: [green]{file_path}[/green]"
-                    )
-            except Exception as e:
-                self.logger.error(f"Failed to update {file_path}: {e}")
-
-        self.logger.info(
-            f"[bold green]Live run completed! Updated {files_updated} files.[/bold green]"
-        )
-
-    def _update_file_docstrings(self, file_path: Path, suggestions: dict) -> bool:
+    def _update_file_docstrings(
+        self, file_path: Path, suggestions: dict, backup_dir: Path | None = None
+    ) -> bool:
         """Update docstrings in a Python file based on suggestions."""
         try:
             content = file_path.read_text(encoding="utf-8")
@@ -353,12 +379,22 @@ class DocGenerator:
             # Process nodes in reverse order to maintain line numbers
             for node in reversed(nodes):
                 identifier = self._get_node_identifier(file_path, node)
-                if identifier in suggestions:
-                    docstring = suggestions[identifier]
-                    if self._insert_docstring(lines, node, docstring):
-                        modified = True
+                if identifier not in suggestions:
+                    continue
+
+                docstring = suggestions[identifier]
+                success, lines = self._update_docstring_with_fallback(
+                    lines, node, docstring
+                )
+
+                if success:
+                    modified = True
 
             if modified:
+                # Create backup before modifying
+                if backup_dir:
+                    _create_backup(file_path, backup_dir, self.logger)
+
                 # Write updated content atomically
                 temp_file = file_path.with_suffix(".tmp")
                 temp_file.write_text("".join(lines), encoding="utf-8")
@@ -370,106 +406,341 @@ class DocGenerator:
 
         return False
 
-    # Constants for docstring handling
-    MIN_DOCSTRING_LENGTH = 6
-    SEARCH_RANGE_LIMIT = 10
+    def _apply_docstrings(
+        self,
+        files_to_process: list[Path],
+        docstrings: dict[str, str],
+        backup_dir: Path | None = None,
+    ) -> int:
+        """Write docstrings into each file in files_to_process.
+
+        Args:
+            files_to_process: List of Python files to process.
+            docstrings: Dictionary mapping identifiers to docstring content.
+            backup_dir: Directory for backup files (None for dry run).
+
+        Returns:
+            Number of files that were modified on disk.
+        """
+        files_updated = 0
+        for file_path in files_to_process:
+            try:
+                if self._update_file_docstrings(file_path, docstrings, backup_dir):
+                    files_updated += 1
+                    self.logger.info(
+                        "Updated docstrings in: [green]%s[/green]", file_path
+                    )
+            except Exception as exc:
+                self.logger.error("Failed to update %s: %s", file_path, exc)
+        return files_updated
+
+    def _process_dry_run(
+        self, files_to_process: list[Path], force_rebuild: bool
+    ) -> None:
+        """Handles the complete dry run process using append mode."""
+        self.logger.info("[bold cyan]DRY RUN active.[/bold cyan]")
+
+        if force_rebuild:
+            self.logger.info("--force-rebuild active. Clearing existing cache.")
+            clear_docs_dry_run_file()
+            existing_cache = {}
+        else:
+            existing_cache = extract_docstrings_from_md(get_docs_dry_run_file())
+            if existing_cache:
+                self.logger.info("Loaded %d items from cache.", len(existing_cache))
+
+        tasks = self._prepare_tasks(files_to_process, force_rebuild, existing_cache)
+
+        if not tasks:
+            if not existing_cache:
+                write_docs_dry_run_file_atomic({})
+
+            dry_run_path = get_docs_dry_run_file()
+            self.logger.info(
+                "[bold green]All documentation is up-to-date![/bold green]"
+            )
+            self.logger.info(f"Cache file: [cyan]{dry_run_path}[/cyan]")
+            return
+
+        # Process new tasks and merge cache for resume functionality
+        all_new_suggestions, new_cache = self._run_worker_pool_with_progress(tasks)
+        existing_cache.update(new_cache)  # Update in-memory cache for next run
+
+        if all_new_suggestions and not self._shutdown_event.is_set():
+            dry_run_path = get_docs_dry_run_file()
+            self.logger.info("[bold green]Dry run completed successfully![/bold green]")
+            self.logger.info(f"Results saved to: [cyan]{dry_run_path}[/cyan]")
+        elif self._shutdown_event.is_set():
+            self.logger.warning("[yellow]Dry run was aborted by user.[/yellow]")
+
+    def _process_live_run(
+        self, files_to_process: list[Path], force_rebuild: bool
+    ) -> None:
+        """Handles the live run process that actually updates files."""
+        self.logger.info(
+            "[bold red]LIVE RUN active. Files will be modified![/bold red]"
+        )
+
+        start_ts = time.strftime("%Y%m%d_%H%M%S")
+        backup_dir = Path(BACKUP_ROOT) / f"docs_{start_ts}"
+        self.last_backup_dir = backup_dir
+        self.logger.info("🗂  Backups will be stored in: %s", backup_dir)
+
+        # Load existing cache first
+        existing_cache = (
+            extract_docstrings_from_md(get_docs_dry_run_file())
+            if not force_rebuild
+            else {}
+        )
+
+        tasks = self._prepare_tasks(files_to_process, force_rebuild, existing_cache)
+
+        # Always build a write set from existing cache
+        write_set: dict[str, str] = existing_cache.copy()
+
+        if not tasks:
+            # No new AI calls needed - apply cached docstrings
+            self.logger.info("No new AI calls -- applying cached docstrings.")
+            modified = self._apply_docstrings(files_to_process, write_set, backup_dir)
+            self.logger.info("%d files updated from cache.", modified)
+
+            # Persist cache after live run to update timestamp
+            if modified:
+                write_docs_dry_run_file_atomic({})  # Bump mtime
+            return
+
+        # Generate new docstrings and merge with existing cache
+        suggestions, new_cache = self._run_worker_pool_with_progress(tasks)
+
+        if not suggestions or self._shutdown_event.is_set():
+            if self._shutdown_event.is_set():
+                self.logger.warning("[yellow]Live run was aborted by user.[/yellow]")
+            return
+
+        # Update write set and cache
+        write_set.update(suggestions)
+        existing_cache.update(new_cache)  # Update in-memory cache for next run
+
+        # Apply all docstrings to files
+        files_updated = self._apply_docstrings(files_to_process, write_set, backup_dir)
+
+        self.logger.info("🟢 Live run done. Backups saved in: %s", self.last_backup_dir)
+        self.logger.info(
+            "[bold green]Live run completed! Updated %d files.[/bold green]",
+            files_updated,
+        )
+
+    @staticmethod
+    def _find_colon_line(node: ast.AST, source_lines: list[str]) -> int:
+        """
+        Return index of line containing ':' at end of definition.
+        For multi-line headers, search backwards from body start to definition start.
+        """
+        start = node.lineno - 1  # Definition start line
+
+        # Use first body element line as upper bound for search (more accurate)
+        if hasattr(node, "body") and node.body:
+            stop = getattr(node.body[0], "lineno", start + 1) - 2
+        else:
+            # Fallback: search reasonable range for colon
+            stop = min(start + 50, len(source_lines) - 1)
+
+        # Search backwards from body start to definition start
+        for i in range(stop, start - 1, -1):
+            if (
+                i >= 0
+                and i < len(source_lines)
+                and ":" in source_lines[i]
+                and source_lines[i].rstrip().endswith(":")
+            ):
+                return i
+
+        return start  # Fallback to definition start
+
+    @staticmethod
+    def _has_inline_docstring(lines: list[str], colon_idx: int) -> bool:
+        """Check if there's an inline docstring on the colon line."""
+        if colon_idx >= len(lines):
+            return False
+        line = lines[colon_idx]
+        return '"""' in line or "'''" in line
+
+    @staticmethod
+    def _extract_inline_docstring(line: str) -> tuple[str, str]:
+        """Extract existing inline docstring and return (prefix, suffix)."""
+        # Handle both """ and ''' quotes
+        for quote in ['"""', "'''"]:
+            if quote in line:
+                parts = line.split(quote)
+                if len(parts) >= MIN_COMPLETE_DOCSTRING_PARTS:
+                    prefix = parts[0]
+                    # Note: suffix not used in current implementation
+                    return prefix, ""
+        return line, ""
+
+    @staticmethod
+    def _get_consistent_indent(lines: list[str], colon_line: int) -> str:
+        """Calculate consistent indentation for docstring."""
+        if colon_line >= len(lines):
+            return "    "
+
+        # Get base indentation from the definition line
+        base_indent = re.match(r"\s*", lines[colon_line]).group(0)
+        return base_indent + "    "
+
+    @staticmethod
+    def _format_docstring_lines(docstring: str, indent: str) -> list[str]:
+        """Wrap plain-text docstring into indented triple-quote block."""
+        # ASSUMPTION: docstring already has no """ quotes
+        lines = []
+        lines.append(f'{indent}"""\n')
+
+        # Wrap text to reasonable width (88 chars - indent length for ruff compliance)
+        max_width = max(60, 88 - len(indent))
+
+        for paragraph in docstring.split("\n\n"):
+            if paragraph.strip():
+                wrapped = textwrap.fill(
+                    paragraph.strip(), width=max_width, subsequent_indent=indent
+                )
+                # Use extend for better performance
+                lines.extend(f"{indent}{line}\n" for line in wrapped.split("\n"))
+                lines.append(f"{indent}\n")  # Blank line between paragraphs
+
+        # Remove last blank line if present
+        if lines and lines[-1].strip() == indent.strip():
+            lines.pop()
+
+        lines.append(f'{indent}"""\n')
+        return lines
 
     def _insert_docstring(
         self, lines: list[str], node: ast.AST, docstring: str
     ) -> bool:
         """Insert docstring into the appropriate location in the source code."""
         try:
-            # Find the colon line (end of function/class definition)
-            colon_line = self._find_colon_line(lines, node.lineno - 1)
+            # Use improved colon detection with source lines
+            colon_line = self._find_colon_line(node, lines)
 
-            # Check if docstring already exists and handle replacement
-            next_line = colon_line + 1
-            if next_line < len(lines) and self._replace_existing_docstring(
-                lines, next_line, colon_line, docstring
-            ):
+            if colon_line >= len(lines):
+                return False
+
+            # Calculate consistent indentation
+            indent = self._get_consistent_indent(lines, colon_line)
+
+            # Handle inline docstrings
+            if self._has_inline_docstring(lines, colon_line):
+                prefix_raw, _ = self._extract_inline_docstring(lines[colon_line])
+                # Extract header before the LAST colon to handle type hints properly
+                # Use rsplit to avoid cutting off at type annotation colons
+                header = prefix_raw.rsplit(":", 1)[0].rstrip() + ":"
+                lines[colon_line] = header + "\n"
+                new_docstring_lines = self._format_docstring_lines(docstring, indent)
+                lines[colon_line + 1 : colon_line + 1] = new_docstring_lines
                 return True
 
+            # Check for existing multi-line docstring using AST
+            next_line = colon_line + 1
+            if next_line < len(lines):
+                # Bonus fix: Use AST to detect existing docstring more reliably
+                try:
+                    # Parse just the function/class to get its docstring
+                    node_source = self._get_source_code(node, lines)
+                    temp_tree = ast.parse(node_source)
+                    temp_node = temp_tree.body[0] if temp_tree.body else None
+
+                    if temp_node and ast.get_docstring(temp_node):
+                        # Find docstring boundaries more accurately
+                        end_line = self._find_docstring_end_robust(
+                            lines, next_line, node
+                        )
+                        new_docstring_lines = self._format_docstring_lines(
+                            docstring, indent
+                        )
+                        lines[next_line : end_line + 1] = new_docstring_lines
+                        return True
+                except (SyntaxError, IndexError):
+                    # Fallback to old method if AST parsing fails
+                    stripped = lines[next_line].strip()
+                    if stripped.startswith('"""') or stripped.startswith("'''"):
+                        quote_char = '"""' if stripped.startswith('"""') else "'''"
+                        end_line = self._find_docstring_end(
+                            lines, next_line, quote_char, stripped
+                        )
+                        new_docstring_lines = self._format_docstring_lines(
+                            docstring, indent
+                        )
+                        lines[next_line : end_line + 1] = new_docstring_lines
+                        return True
+
             # Insert new docstring
-            self._insert_new_docstring(lines, colon_line, docstring)
+            new_docstring_lines = self._format_docstring_lines(docstring, indent)
+            lines[colon_line + 1 : colon_line + 1] = new_docstring_lines
             return True
 
         except Exception as e:
             self.logger.error(f"Error inserting docstring for {node.name}: {e}")
             return False
 
-    def _find_colon_line(self, lines: list[str], start_line: int) -> int:
-        """Find the line containing the colon that ends the function/class definition."""
-        for i in range(
-            start_line, min(len(lines), start_line + self.SEARCH_RANGE_LIMIT)
-        ):
-            if ":" in lines[i]:
-                return i
-        return start_line
-
-    def _replace_existing_docstring(
-        self, lines: list[str], next_line: int, colon_line: int, docstring: str
-    ) -> bool:
-        """Replace existing docstring if found."""
-        stripped = lines[next_line].strip()
-        if not (stripped.startswith('"""') or stripped.startswith("'''")):
-            return False
-
-        quote_char = '"""' if stripped.startswith('"""') else "'''"
-        end_line = self._find_docstring_end(lines, next_line, quote_char, stripped)
-
-        # Replace lines
-        indent = self._get_line_indent(lines[colon_line + 1])
-        new_docstring_lines = self._format_docstring_lines(docstring, indent)
-        lines[next_line : end_line + 1] = new_docstring_lines
-        return True
-
-    def _find_docstring_end(
-        self, lines: list[str], start_line: int, quote_char: str, first_line: str
+    @staticmethod
+    def _find_docstring_end_robust(
+        lines: list[str], start_line: int, node: ast.AST
     ) -> int:
-        """Find the end line of an existing docstring."""
-        if (
-            first_line.endswith(quote_char)
-            and len(first_line) > self.MIN_DOCSTRING_LENGTH
-        ):
+        """Find docstring end using AST information when possible."""
+        try:
+            # Try to use AST end_lineno if available
+            if hasattr(node, "body") and node.body:
+                first_stmt = node.body[0]
+                if isinstance(first_stmt, ast.Expr) and isinstance(
+                    first_stmt.value, ast.Constant
+                ):
+                    # This is likely the docstring statement
+                    return getattr(first_stmt, "end_lineno", start_line) - 1
+        except Exception:
+            pass
+
+        # Fallback to searching for quote patterns
+        line_content = lines[start_line].strip()
+        if line_content.startswith('"""'):
+            quote_char = '"""'
+        elif line_content.startswith("'''"):
+            quote_char = "'''"
+        else:
             return start_line
 
-        for i in range(start_line + 1, len(lines)):
+        # Search for closing quotes
+        for i in range(start_line + 1, min(len(lines), start_line + 50)):
             if quote_char in lines[i]:
                 return i
         return start_line
 
-    def _insert_new_docstring(
-        self, lines: list[str], colon_line: int, docstring: str
-    ) -> None:
-        """Insert a new docstring after the colon line."""
-        indent = self._get_line_indent(lines[colon_line]) + "    "
-        new_docstring_lines = self._format_docstring_lines(docstring, indent)
-        lines[colon_line + 1 : colon_line + 1] = new_docstring_lines
-
     @staticmethod
-    def _get_line_indent(line: str) -> str:
-        """Get the indentation of a line."""
-        return line[: len(line) - len(line.lstrip())]
-
-    @staticmethod
-    def _format_docstring_lines(docstring: str, indent: str) -> list[str]:
-        """Format docstring with proper indentation."""
-        lines = []
-        lines.append(f'{indent}"""\n')
-
-        for line in docstring.split("\n"):
-            if line.strip():
-                lines.append(f"{indent}{line}\n")
-            else:
-                lines.append(f"{indent}\n")
-
-        lines.append(f'{indent}"""\n')
-        return lines
+    def _find_docstring_end(
+        lines: list[str],
+        start_line: int,
+        quote_char: str,
+        first_line: str,
+    ) -> int:
+        """Fallback: scan downwards for the matching closing quotes."""
+        # If the opening and closing quotes are on the same line
+        if first_line.count(quote_char) >= MIN_QUOTE_COUNT_FOR_INLINE:
+            return start_line
+        for i in range(start_line + 1, min(len(lines), start_line + 50)):
+            if quote_char in lines[i]:
+                return i
+        return start_line
 
     def _prepare_tasks(
-        self, files_to_process: list[Path], force_rebuild: bool, preserved_cache: dict
-    ) -> list[dict]:
+        self,
+        files_to_process: list[Path],
+        force_rebuild: bool,
+        preserved_cache: dict[str, str],
+    ) -> list[dict[str, str]]:
         """Parses files and creates a list of tasks, respecting the force_rebuild flag."""
+        if not files_to_process:
+            self.logger.info("No candidate files -- skipping task preparation.")
+            return []
+
         tasks = []
         skipped_count = 0
         self.logger.info("Preparing tasks for parallel processing...")
@@ -488,12 +759,11 @@ class DocGenerator:
                 for node in nodes:
                     identifier = self._get_node_identifier(file_path, node)
 
-                    # FIXED: Proper cache logic - only process if force_rebuild OR not in cache
                     should_process = force_rebuild or identifier not in preserved_cache
 
                     if not should_process:
-                        self.logger.info(
-                            f"Skipping cached item: [cyan]{identifier}[/cyan]"
+                        self.logger.debug(
+                            "Skipping cached item: [cyan]%s[/cyan]", identifier
                         )
                         skipped_count += 1
                     else:
@@ -515,12 +785,12 @@ class DocGenerator:
                     exc_info=self.debug,
                 )
 
-        # Log the actual task count after filtering
         self.logger.info(
-            f"Skipped {skipped_count} cached items, generated {len(tasks)} new tasks for processing."
+            "Skipped %d cached items, generated %d new tasks for processing.",
+            skipped_count,
+            len(tasks),
         )
 
-        # FIXED: Early return if no tasks need processing
         if not tasks:
             self.logger.info(
                 "[bold green]All documentation is up-to-date based on cache. No processing needed.[/bold green]"
@@ -528,9 +798,9 @@ class DocGenerator:
 
         return tasks
 
-    def _collect_pool_results(self, async_results) -> dict:
+    def _collect_pool_results(self, async_results) -> dict[str, str]:
         """Safely collects results, logging the status of each individual worker."""
-        suggestions = {}
+        suggestions: dict[str, str] = {}
         if self._shutdown_event.is_set():
             self.logger.info(
                 "[yellow]Result collection skipped due to user shutdown.[/yellow]"
@@ -748,6 +1018,11 @@ class DocGenerator:
         max_sleep = 2.0  # Max 2 seconds
         current_sleep = base_sleep
 
+        # RPM monitoring (optional debug feature)
+        rpm_start_time = time.time()
+        rpm_last_log = rpm_start_time
+        rpm_interval = 30.0  # Log every 30 seconds
+
         try:
             while not async_results.ready():
                 if self._shutdown_event.is_set():
@@ -764,8 +1039,18 @@ class DocGenerator:
                     current_sleep,
                     base_sleep,
                     max_sleep,
-                    shared_progress_dict,  # Pass the shared progress dict
+                    shared_progress_dict,
                 )
+
+                # Optional RPM logging for rate limiting awareness
+                current_time = time.time()
+                if current_time - rpm_last_log >= rpm_interval:
+                    elapsed = current_time - rpm_start_time
+                    if elapsed > 0 and last_completed > 0:
+                        rpm = (last_completed * 60) / elapsed
+                        self.logger.debug(f"Processing rate: {rpm:.1f} requests/minute")
+                    rpm_last_log = current_time
+
                 time.sleep(current_sleep)
 
         except (KeyboardInterrupt, SystemExit):
@@ -779,10 +1064,12 @@ class DocGenerator:
         # Final update - mark all as complete
         self._finalize_progress(progress, main_task_id, worker_tasks, total_tasks)
 
-    def _run_worker_pool_with_progress(self, tasks: list[dict]) -> dict:
+    def _run_worker_pool_with_progress(
+        self, tasks: list[dict[str, str]]
+    ) -> tuple[dict[str, str], dict[str, str]]:
         """Initializes and monitors a multiprocessing pool with Rich progress bars for each worker."""
         if not tasks:
-            return {}
+            return {}, {}
 
         # MEMORY: Better resource management - Force garbage collection before starting
         import gc  # noqa: PLC0415
@@ -791,8 +1078,7 @@ class DocGenerator:
 
         # Use context manager for proper cleanup - FIX: Memory leak prevention
         with multiprocessing.Manager() as manager:
-            # FIX: Create a fresh shared dictionary for THIS run only.
-            # Do not use a persistent instance attribute.
+            # Create shared dictionaries for this run
             shared_progress_dict = manager.dict()
             shared_cache = manager.dict()
 
@@ -820,11 +1106,9 @@ class DocGenerator:
                 with multiprocessing.Pool(
                     processes=worker_count,
                     initializer=_pool_initializer,
-                    # FIX: Pass the new, live shared dictionary
                     initargs=(shared_progress_dict, shared_cache),
                 ) as pool:
                     async_results = pool.map_async(_doc_generation_worker, tasks)
-                    # FIX: Pass the shared_progress_dict to the monitor
                     self._monitor_pool_progress(
                         async_results,
                         pool,
@@ -835,12 +1119,15 @@ class DocGenerator:
                     )
                     result = self._collect_pool_results(async_results)
 
+                    # Merge shared cache into preserved_cache for resume functionality
+                    cache_result: dict[str, str] = dict(shared_cache) if result else {}
+
                     # MEMORY: Force cleanup
                     pool.close()
                     pool.join()
                     gc.collect()
 
-                    return result
+                    return result, cache_result
 
     def run(self, path: str, dry_run: bool, all_files: bool, force_rebuild: bool):
         """Main entry point for documentation generation."""
@@ -944,14 +1231,26 @@ class DocGenerator:
 
     @staticmethod
     def _get_node_identifier(file_path: Path, node: ast.AST) -> str:
-        """Generate unique identifier for AST node."""
+        """Generate unique identifier for AST node with robust path resolution."""
         try:
-            module_path = ".".join(
-                file_path.resolve().relative_to(Path.cwd()).with_suffix("").parts
-            )
+            # Try relative to project root first
+            try:
+                relative_path = file_path.resolve().relative_to(PROJECT_ROOT)
+                module_parts = relative_path.with_suffix("").parts
+            except ValueError:
+                # Fallback: try relative to current working directory
+                try:
+                    relative_path = file_path.resolve().relative_to(Path.cwd())
+                    module_parts = relative_path.with_suffix("").parts
+                except ValueError:
+                    # Final fallback: just use the filename
+                    module_parts = (file_path.stem,)
+
+            module_path = ".".join(module_parts)
             return f"{module_path}.{node.name}"
-        except ValueError:
-            return f"{file_path.name}.{node.name}"
+        except Exception:
+            # Ultimate fallback
+            return f"{file_path.stem}.{node.name}"
 
     @staticmethod
     def _get_source_code(node: ast.AST, lines: list[str]) -> str:

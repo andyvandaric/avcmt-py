@@ -86,8 +86,8 @@ def _execute_doc_generation(
     all_files: bool,
     force_rebuild: bool,
     debug: bool,
-) -> int:
-    """Execute the documentation generation process and return exit code."""
+) -> tuple[int, Path | None]:
+    """Execute the documentation generation process and return exit code and backup dir."""
     try:
         generator = DocGenerator(shutdown_event=shutdown_event, debug=debug)
         generator.run(
@@ -98,11 +98,12 @@ def _execute_doc_generation(
         )
 
         # Check if process was aborted by user
-        return 130 if shutdown_event.is_set() else 0
+        backup_dir = getattr(generator, "last_backup_dir", None)
+        return (130 if shutdown_event.is_set() else 0), backup_dir
 
     except DocGeneratorError as e:
         typer.secho(f"❌ Error: {e}", fg=typer.colors.RED, err=True)
-        return 1
+        return 1, None
     except Exception as e:
         if not shutdown_event.is_set():
             logger = logging.getLogger("avcmt")
@@ -112,10 +113,10 @@ def _execute_doc_generation(
                 fg=typer.colors.RED,
                 err=True,
             )
-        return 1
+        return 1, None
 
 
-def _show_summary_panel(shutdown_event) -> None:
+def _show_summary_panel(shutdown_event, backup_dir: Path | None = None) -> None:
     """Display the summary panel with file paths."""
     try:
         summary_text = Text()
@@ -132,6 +133,8 @@ def _show_summary_panel(shutdown_event) -> None:
             summary_text.append(f"\n📄 Dry run results: {dry_run_path.as_uri()}")
         if log_path.exists():
             summary_text.append(f"\n📜 Full log file:   {log_path.as_uri()}")
+        if backup_dir and backup_dir.exists():
+            summary_text.append(f"\n🗂 Backups dir:   {backup_dir.as_uri()}")
 
         # Render summary panel
         panel = Panel(
@@ -142,10 +145,10 @@ def _show_summary_panel(shutdown_event) -> None:
 
     except Exception:
         # Fallback: Always show basic file paths even if styling fails
-        _show_fallback_summary(shutdown_event)
+        _show_fallback_summary(shutdown_event, backup_dir)
 
 
-def _show_fallback_summary(shutdown_event) -> None:
+def _show_fallback_summary(shutdown_event, backup_dir: Path | None = None) -> None:
     """Show fallback summary in plain text if Rich styling fails."""
     try:
         print("\n=== SUMMARY ===")
@@ -161,6 +164,8 @@ def _show_fallback_summary(shutdown_event) -> None:
             print(f"📄 Dry run results: {dry_run_path}")
         if log_path.exists():
             print(f"📜 Full log file:   {log_path}")
+        if backup_dir and backup_dir.exists():
+            print(f"🗂 Backups dir:   {backup_dir}")
         print("================\n")
     except Exception:
         # Final fallback - silently ignore
@@ -214,12 +219,12 @@ def run_doc_updater(
 
     # Execute with graceful shutdown handling
     with GracefulShutdownManager() as shutdown_event:
-        exit_code = _execute_doc_generation(
+        exit_code, backup_dir = _execute_doc_generation(
             shutdown_event, path, dry_run, all_files, force_rebuild, debug
         )
 
     # Always show summary panel regardless of termination method
-    _show_summary_panel(shutdown_event)
+    _show_summary_panel(shutdown_event, backup_dir)
 
     # Enhanced: Platform-specific clean exit using utility function
     windows_safe_exit(exit_code)
